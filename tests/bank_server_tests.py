@@ -1,9 +1,9 @@
 import unittest
 import argon2
-from bank_server import User, UserDatabase
+from src.db.db import User, UserDatabase, make_hash
 
 
-class TestUserIntegration(unittest.TestCase):
+class TestBankDB(unittest.TestCase):
     def setUp(self):
         # Initialize a UserDatabase instance
         self.user_db = UserDatabase()
@@ -13,7 +13,7 @@ class TestUserIntegration(unittest.TestCase):
         user1 = User(
             "aaaa-aaaa-aaaa-aaaa",
             "test_user1",
-            argon2.PasswordHasher().hash("password1"),
+            make_hash("password1"),
         )
 
         # Add the user to the database
@@ -23,8 +23,6 @@ class TestUserIntegration(unittest.TestCase):
         retrieved_user = self.user_db.read(
             user1.get_data()[0]
         )  # Assuming the first element in the tuple is the UUID
-
-        self.user_db.delete("aaaa-aaaa-aaaa-aaaa")
 
         self.assertIsNotNone(retrieved_user)
 
@@ -46,7 +44,6 @@ class TestUserIntegration(unittest.TestCase):
 
         # Retrieve the updated user from the database
         updated_user = self.user_db.read(user2.get_data()[0])
-        self.user_db.delete("bbbb-bbbb-bbbb-bbbb")
         if updated_user is not None:
             self.assertTrue(
                 argon2.PasswordHasher().verify(updated_user.get_data()[2], new_password)
@@ -67,13 +64,15 @@ class TestUserIntegration(unittest.TestCase):
 
         # Retrieve the updated user from the database
         updated_user = self.user_db.read(user3.get_data()[0])
-        self.user_db.delete("cccc-cccc-cccc-cccc")
 
         if updated_user is not None:
             self.assertEqual(updated_user.get_data()[3], expected_balance)
 
     def tearDown(self):
         # Clean up the database after tests
+        self.user_db.delete("aaaa-aaaa-aaaa-aaaa")
+        self.user_db.delete("bbbb-bbbb-bbbb-bbbb")
+        self.user_db.delete("cccc-cccc-cccc-cccc")
         pass
 
 
