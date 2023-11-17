@@ -1,52 +1,38 @@
 import unittest
 import argon2
-from src.db import User, UserDatabase, make_hash
+from src.db import User, UserDatabase
+from src.bank import UserDT, Bank
 
 
 class TestBankDB(unittest.TestCase):
     def setUp(self):
-        # Initialize a UserDatabase instance
         self.user_db = UserDatabase()
-
-    def test_user_creation_and_retrieval_by_uuid(self):
-        # Create a user
-        user = User(
+        self.user = User(
             "aaaa-aaaa-aaaa-aaaa",
             "test_user1",
-            make_hash("password1"),
+            argon2.PasswordHasher().hash("password1"),
         )
+        self.user_db.create(self.user)
 
-        # Add the user to the database
-        self.user_db.create(user)
-
+    def test_user_creation_and_retrieval_by_uuid(self):
         # Retrieve the user from the database
-        retrieved_user = self.user_db.read(uuid=user.get_data()[0])
+        retrieved_user = self.user_db.read(uuid=self.user.get_data()[0])
 
         self.assertIsNotNone(retrieved_user)
 
         # Assert that the retrieved user matches the original user
         if retrieved_user is not None:
-            self.assertEqual(user.get_data(), retrieved_user.get_data())
+            self.assertEqual(self.user.get_data(), retrieved_user.get_data())
 
     def test_user_creation_and_retrieval_by_username(self):
-        # Create a user
-        user = User(
-            "bbbb-bbbb-bbbb-bbbb",
-            "test_user2",
-            make_hash("password2"),
-        )
-
-        # Add the user to the database
-        self.user_db.create(user)
-
         # Retrieve the user from the database
-        retrieved_user = self.user_db.read(username=user.get_data()[1])
+        retrieved_user = self.user_db.read(username=self.user.get_data()[1])
 
         self.assertIsNotNone(retrieved_user)
 
         # Assert that the retrieved user matches the original user
         if retrieved_user is not None:
-            self.assertEqual(user.get_data(), retrieved_user.get_data())
+            self.assertEqual(self.user.get_data(), retrieved_user.get_data())
 
     def test_user_retrieval_without_parameters(self):
         # Retrieve the user from the database
@@ -56,17 +42,15 @@ class TestBankDB(unittest.TestCase):
 
     def test_password_update(self):
         user = User(
-            "cccc-cccc-cccc-cccc",
-            "test_user3",
-            argon2.PasswordHasher().hash("password3"),
+            "bbbb-bbbb-bbbb-bbbb",
+            "test_user2",
+            argon2.PasswordHasher().hash("password2"),
         )
         self.user_db.create(user)
 
-        # Update the user's password
         new_password = "new_password"
         self.user_db.update(user.get_data()[0], password=new_password)
 
-        # Retrieve the updated user from the database
         updated_user = self.user_db.read(user.get_data()[0])
         if updated_user is not None:
             self.assertTrue(
@@ -75,20 +59,18 @@ class TestBankDB(unittest.TestCase):
 
     def test_balance_update(self):
         user = User(
-            "dddd-dddd-dddd-dddd",
-            "test_user4",
-            argon2.PasswordHasher().hash("password4"),
+            "cccc-cccc-cccc-cccc",
+            "test_user3",
+            argon2.PasswordHasher().hash("password3"),
         )
         self.user_db.create(user)
 
-        # Update the user's balance, because it starts with 0, expected should be delta
+        # Update the user's balance, expected should be delta because initial is zero
         delta_balance = 200.0
         expected_balance = delta_balance
         self.user_db.update(user.get_data()[0], delta_balance=delta_balance)
 
-        # Retrieve the updated user from the database
         updated_user = self.user_db.read(user.get_data()[0])
-
         if updated_user is not None:
             self.assertEqual(updated_user.get_data()[3], expected_balance)
 
@@ -97,8 +79,36 @@ class TestBankDB(unittest.TestCase):
         self.user_db.delete("aaaa-aaaa-aaaa-aaaa")
         self.user_db.delete("bbbb-bbbb-bbbb-bbbb")
         self.user_db.delete("cccc-cccc-cccc-cccc")
-        self.user_db.delete("dddd-dddd-dddd-dddd")
         pass
+
+
+class TestBankAuth(unittest.TestCase):
+    def setUp(self):
+        # Initialize a UserDatabase instance
+        self.database = UserDatabase()
+        self.bank = Bank(self.database)
+        self.user = UserDT(
+            "test_user",
+            "password",
+        )
+        self.bank.register(self.user)
+
+    def test_user_login_with_correct_password(self):
+        self.assertTrue(self.bank.login(self.user))
+
+    def test_user_login_with_incorrect_password(self):
+        wrong_password_user = UserDT(
+            "test_user",
+            "wrong_password",
+        )
+        self.assertFalse(self.bank.login(wrong_password_user))
+
+    def tearDown(self):
+        # Clean up the database after tests
+        user_data = self.database.read(username=self.user.username)
+        if user_data is not None:
+            uuid = user_data.get_data()[0]
+            self.database.delete(uuid)
 
 
 if __name__ == "__main__":

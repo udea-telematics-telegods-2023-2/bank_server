@@ -8,19 +8,6 @@ from src.utils import get_project_root
 PROJECT_ROOT = get_project_root()
 
 
-def make_hash(password: str) -> str:
-    """
-    Hashes the input password using the Argon2 algorithm.
-
-    Args:
-        password (str): The plain-text password to be hashed.
-
-    Returns:
-        str: The hashed representation of the input password.
-    """
-    return PasswordHasher().hash(password)
-
-
 @dataclass
 class User:
     """
@@ -163,7 +150,7 @@ class UserDatabase:
                         SET hash = ?
                         WHERE uuid = ?
                     """,
-                    (make_hash(password), uuid),
+                    (PasswordHasher().hash(password), uuid),
                 )
 
         def __update_balance(uuid: str, delta_balance: float):
