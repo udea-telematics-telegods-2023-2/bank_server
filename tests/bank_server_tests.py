@@ -5,6 +5,10 @@ from src.bank import UserDT, Bank
 
 
 class TestBankDB(unittest.TestCase):
+    """
+    Tests the basic CRUD suite of functions.
+    """
+
     def setUp(self):
         self.user_db = UserDatabase()
         self.user = User(
@@ -79,10 +83,13 @@ class TestBankDB(unittest.TestCase):
         self.user_db.delete("aaaa-aaaa-aaaa-aaaa")
         self.user_db.delete("bbbb-bbbb-bbbb-bbbb")
         self.user_db.delete("cccc-cccc-cccc-cccc")
-        pass
 
 
 class TestBankAuth(unittest.TestCase):
+    """
+    Tests the Bank class authentication.
+    """
+
     def setUp(self):
         # Initialize a UserDatabase instance
         self.database = UserDatabase()
