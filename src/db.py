@@ -109,7 +109,7 @@ class UserDatabase:
                 user.get_data(),
             )
 
-    def read(self, uuid: str) -> User | None:
+    def read(self, uuid: str | None = None, username: str | None = None) -> User | None:
         """
         Retrieves a user from the 'bank' table by UUID.
 
@@ -119,13 +119,15 @@ class UserDatabase:
         Returns:
             User | None: A User instance if found, or None if the user is not found.
         """
+        if uuid is None and username is None:
+            return None
+
         with sqlite3.connect(self.__db_path) as connection:
             cursor = connection.cursor()
+            query = f"SELECT * FROM bank WHERE {'uuid' if uuid is not None else 'username'} = ?"
             result = cursor.execute(
-                """
-                    SELECT * FROM bank WHERE uuid = ?
-                """,
-                (uuid,),
+                query,
+                (uuid if uuid is not None else username,),
             )
             user = result.fetchone()
             return User(*user) if user is not None else user
