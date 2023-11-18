@@ -12,7 +12,7 @@ passwords = ["soyunserdeluz", "tele", "cesarteodio", "genshin123", "funcional"]
 # UUID for each user, username, hashed password and initial balance
 ph = PasswordHasher()
 clients = [
-    db.User(str(uuid.uuid4()), username, ph.hash(password))
+    db.User(str(uuid.uuid4()), username, ph.hash(password), 250_000)
     for username, password in zip(usernames, passwords)
 ]
 
