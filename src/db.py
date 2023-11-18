@@ -1,3 +1,5 @@
+from os import makedirs
+from os.path import isdir
 import sqlite3
 from argon2 import PasswordHasher
 from dataclasses import dataclass
@@ -67,6 +69,9 @@ class UserDatabase:
             db_path (str): The path to the DB, defaults to {PROJECT_ROOT}/db/bank.db
         """
         self.__db_path: str = db_path
+        db_dir = self.__db_path[: self.__db_path.rindex("/")]
+        if not isdir(db_dir):
+            makedirs(self.__db_path)
         with sqlite3.connect(self.__db_path) as connection:
             connection.execute(
                 """
