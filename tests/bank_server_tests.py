@@ -26,7 +26,7 @@ class TestBankDB(unittest.TestCase):
 
         # Assert that the retrieved user matches the original user
         if retrieved_user is not None:
-            self.assertEqual(self.user.get_data(), retrieved_user.get_data())
+            self.assertEqual(retrieved_user.get_data(), self.user.get_data())
 
     def test_user_creation_and_retrieval_by_username(self):
         # Retrieve the user from the database
@@ -36,7 +36,7 @@ class TestBankDB(unittest.TestCase):
 
         # Assert that the retrieved user matches the original user
         if retrieved_user is not None:
-            self.assertEqual(self.user.get_data(), retrieved_user.get_data())
+            self.assertEqual(retrieved_user.get_data(), self.user.get_data())
 
     def test_user_retrieval_without_parameters(self):
         # Retrieve the user from the database
@@ -45,44 +45,28 @@ class TestBankDB(unittest.TestCase):
         self.assertIsNone(retrieved_user)
 
     def test_password_update(self):
-        user = User(
-            "bbbb-bbbb-bbbb-bbbb",
-            "test_user2",
-            argon2.PasswordHasher().hash("password2"),
-        )
-        self.user_db.create(user)
-
         new_password = "new_password"
-        self.user_db.update(user.get_data()[0], password=new_password)
+        self.user_db.update(uuid=self.user.get_data()[0], password=new_password)
 
-        updated_user = self.user_db.read(user.get_data()[0])
+        updated_user = self.user_db.read(self.user.get_data()[0])
         if updated_user is not None:
             self.assertTrue(
                 argon2.PasswordHasher().verify(updated_user.get_data()[2], new_password)
             )
 
     def test_balance_update(self):
-        user = User(
-            "cccc-cccc-cccc-cccc",
-            "test_user3",
-            argon2.PasswordHasher().hash("password3"),
-        )
-        self.user_db.create(user)
-
         # Update the user's balance, expected should be delta because initial is zero
         delta_balance = 200.0
         expected_balance = delta_balance
-        self.user_db.update(user.get_data()[0], delta_balance=delta_balance)
+        self.user_db.update(uuid=self.user.get_data()[0], delta_balance=delta_balance)
 
-        updated_user = self.user_db.read(user.get_data()[0])
+        updated_user = self.user_db.read(self.user.get_data()[0])
         if updated_user is not None:
             self.assertEqual(updated_user.get_data()[3], expected_balance)
 
     def tearDown(self):
         # Clean up the database after tests
         self.user_db.delete("aaaa-aaaa-aaaa-aaaa")
-        self.user_db.delete("bbbb-bbbb-bbbb-bbbb")
-        self.user_db.delete("cccc-cccc-cccc-cccc")
 
 
 class TestBankAuth(unittest.TestCase):
@@ -91,30 +75,177 @@ class TestBankAuth(unittest.TestCase):
     """
 
     def setUp(self):
-        # Initialize a UserDatabase instance
         self.database = UserDatabase()
         self.bank = Bank(self.database)
-        self.user = UserDT(
-            "test_user",
-            "password",
-        )
-        self.bank.register(self.user)
+        self.users = [UserDT(f"test_user{i}", "password") for i in range(1, 2)]
+        self.uuids = []
+        for user in self.users:
+            self.bank.register(user)
+            user_data = self.database.read(username=user.username)
+            if user_data is not None:
+                self.uuids.append(user_data.get_data()[0])
 
     def test_user_login_with_correct_password(self):
-        self.assertTrue(self.bank.login(self.user))
+        self.assertTrue(self.bank.login(self.users[0]))
 
     def test_user_login_with_incorrect_password(self):
         wrong_password_user = UserDT(
-            "test_user",
+            self.users[0].username,
             "wrong_password",
         )
         self.assertFalse(self.bank.login(wrong_password_user))
 
+    def test_change_password_correctly(self):
+        # current_password = self.user1.password
+        # new_password = "new_password"
+        # self.bank.change_password(uuid=self.uuid2, old_password=current_password, new_password=new_password)
+        pass
+
+    def test_change_password_failure(self):
+        pass
+
     def tearDown(self):
         # Clean up the database after tests
-        user_data = self.database.read(username=self.user.username)
-        if user_data is not None:
-            uuid = user_data.get_data()[0]
+        for uuid in self.uuids:
+            self.database.delete(uuid)
+
+
+class TestBankTransactions(unittest.TestCase):
+    """
+    Tests the basic transactions related to the bank.
+    """
+
+    def setUp(self):
+        self.database = UserDatabase()
+        self.bank = Bank(self.database)
+        self.users = [UserDT(f"test_user{i}", "password") for i in range(1, 3)]
+        self.uuids = []
+        for user in self.users:
+            self.bank.register(user)
+            user_data = self.database.read(username=user.username)
+            if user_data is not None:
+                self.uuids.append(user_data.get_data()[0])
+
+    def test_deposit(self):
+        # Use test_user1
+        uuid = self.uuids[0]
+
+        # Deposit delta_balance to test_user1
+        delta_balance = 5000
+        self.bank.deposit(uuid=uuid, amount=delta_balance)
+
+        # Check if expected_balance matches delta balance, because initial is 0.0
+        expected_balance = delta_balance
+        self.assertEqual(self.bank.balance(uuid=uuid), expected_balance)
+
+    def test_withdraw_with_enough_balance(self):
+        # Use test_user1
+        uuid = self.uuids[0]
+
+        # Deposit enough funds
+        deposit_amount = 5000
+        self.bank.deposit(uuid=uuid, amount=deposit_amount)
+
+        # Check balance before withdraw
+        old_balance = self.bank.balance(uuid=uuid)
+
+        # Withdraw from account
+        withdraw_amount = 3000
+        withdrawal_result = self.bank.withdraw(uuid=uuid, amount=withdraw_amount)
+
+        # Confirm new balance, and succesful withdrawal
+        expected_balance = old_balance - withdraw_amount
+        self.assertEqual(self.bank.balance(uuid=uuid), expected_balance)
+        self.assertTrue(withdrawal_result)
+
+    def test_withdraw_with_not_enough_balance(self):
+        # Use test_user1
+        uuid = self.uuids[0]
+
+        # Check balance before withdraw
+        old_balance = self.bank.balance(uuid=uuid)
+
+        # Withdraw from account
+        withdraw_amount = 3000
+        withdrawal_result = self.bank.withdraw(uuid=uuid, amount=withdraw_amount)
+
+        # Confirm unaffected balance and unsuccesful withdrawal
+        expected_balance = old_balance
+        self.assertEqual(self.bank.balance(uuid=uuid), expected_balance)
+        self.assertFalse(withdrawal_result)
+
+    def test_withdraw_with_just_enough_balance(self):
+        # Use test_user1
+        uuid = self.uuids[0]
+
+        # Deposit just enough funds
+        deposit_amount = 5000
+        self.bank.deposit(uuid=uuid, amount=deposit_amount)
+
+        # Check balance before withdraw
+        old_balance = self.bank.balance(uuid=uuid)
+
+        # Withdraw from account
+        withdraw_amount = deposit_amount
+        withdrawal_result = self.bank.withdraw(uuid=uuid, amount=withdraw_amount)
+
+        # Confirm new balance, and succesful withdrawal
+        expected_balance = old_balance - withdraw_amount
+        self.assertEqual(self.bank.balance(uuid=uuid), expected_balance)
+        self.assertTrue(withdrawal_result)
+
+    def test_transfer_to_existent_user(self):
+        # Use test_user1 and test_user2
+        uuid1, uuid2 = self.uuids
+
+        # Deposit enough funds
+        deposit_amount = 5000
+        self.bank.deposit(uuid=uuid1, amount=deposit_amount)
+
+        # Check balance before transfer
+        old_balance1 = self.bank.balance(uuid=uuid1)
+        old_balance2 = self.bank.balance(uuid=uuid2)
+
+        # Transfer from test_user5 to test_user6
+        transfer_amount = deposit_amount
+        transfer_result = self.bank.transfer(
+            sender_uuid=uuid1, receiver_uuid=uuid2, amount=transfer_amount
+        )
+
+        # Confirm new balances, and succesful transfer
+        expected_balance1 = old_balance1 - transfer_amount
+        expected_balance2 = old_balance2 + transfer_amount
+
+        self.assertEqual(self.bank.balance(uuid=uuid1), expected_balance1)
+        self.assertEqual(self.bank.balance(uuid=uuid2), expected_balance2)
+        self.assertTrue(transfer_result)
+
+    def test_transfer_to_non_existent_user(self):
+        # Use test_user1 and non_existent_user
+        uuid1 = self.uuids[0]
+        uuid2 = "this-is-clearly-not-a-valid-uuid"
+
+        # Deposit enough funds
+        deposit_amount = 5000
+        self.bank.deposit(uuid=uuid1, amount=deposit_amount)
+
+        # Check balance before transfer
+        old_balance = self.bank.balance(uuid=uuid1)
+
+        # Try to transfer from test_user7 to a non existent user
+        transfer_amount = deposit_amount
+        transfer_result = self.bank.transfer(
+            sender_uuid=uuid1, receiver_uuid=uuid2, amount=transfer_amount
+        )
+
+        # Confirm same balance, and unsuccesful transfer
+        expected_balance = old_balance
+        self.assertEqual(self.bank.balance(uuid=uuid1), expected_balance)
+        self.assertFalse(transfer_result)
+
+    def tearDown(self):
+        # Clean up the database after tests
+        for uuid in self.uuids:
             self.database.delete(uuid)
 
 
