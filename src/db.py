@@ -1,5 +1,4 @@
 from os import makedirs
-from os.path import isdir
 import sqlite3
 from argon2 import PasswordHasher
 from dataclasses import dataclass

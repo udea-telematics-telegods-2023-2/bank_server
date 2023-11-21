@@ -9,11 +9,11 @@ from sys import argv, exit
 
 class Formatter(logging.Formatter):
     FORMATS = {
-        logging.DEBUG: "[-] %(asctime)s - %(message)s",
-        logging.INFO: "[i] %(asctime)s - %(message)s",
-        logging.WARNING: "[!] %(asctime)s - %(message)s",
-        logging.ERROR: "[!!] %(asctime)s - %(message)s",
-        logging.CRITICAL: "[!!!] %(asctime)s - %(message)s",
+        logging.DEBUG: "[DEBUG] %(asctime)s - %(message)s",
+        logging.INFO: "[INFO]  %(asctime)s - %(message)s",
+        logging.WARNING: "[WARN]  %(asctime)s - %(message)s",
+        logging.ERROR: "[ERROR] %(asctime)s - %(message)s",
+        logging.CRITICAL: "[CRIT]  %(asctime)s - %(message)s",
     }
 
     def format(self, record):
@@ -26,35 +26,35 @@ class Command:
     def __init__(self, command: str, arguments: list):
         self.__command = command
         self.__arguments = arguments
+        self.__fn = self.no_fn
 
         match self.__command:
             case "LOGIN":
-                self.__error_code = 2
                 self.__fn = BANK.login
 
             case "REGISTER":
-                self.__error_code = 3
                 self.__fn = BANK.register
+
+            case "DEPOSIT":
+                self.__fn = BANK.deposit
 
             case _:
                 self.__arguments = []
-                self.__error_code = 1
-                self.__fn = self.no_fn
-
-    def no_fn(self, _=None) -> bool:
-        return False
 
     def debug(self):
-        if self.__error_code != 1:
+        if self.__error_code == 0:
             LOGGER.info(
                 f"{self.__command} executed with args {self.__arguments}",
             )
 
-    def fn(self) -> int:
-        self.__exit_status = self.__fn(*self.__arguments)
-        if self.__exit_status is None or self.__exit_status:
-            return 0
-        return self.__error_code
+    def no_fn(self, _=None) -> tuple[int, str]:
+        return 1, ""
+
+    def fn(self) -> tuple[int, str]:
+        self.__error_code, data = self.__fn(*self.__arguments)
+        if self.__error_code == 0:
+            return 0, data
+        return self.__error_code, ""
 
 
 class BankServerHandler(BaseRequestHandler):
@@ -76,30 +76,41 @@ class BankServerHandler(BaseRequestHandler):
 
         LOGGER.error(error_msg)
 
-    def send_error_code(self, error_code):
+    def send_error_code(self, error_code=255):
         self.request.sendall(f"ERR {error_code}\r\n".encode("utf-8"))
 
-    def handle_pre_login(self, data: str) -> bool:
-        command, *arguments = data.split()
-        LOGGER.info(f"Command {command} issued by {self.client_address}")
+    def send_ok_data(self, ok_data=""):
+        self.request.sendall(f"OK {ok_data}\r\n".encode("utf-8"))
 
+    def handle_pre_login(self, data: str) -> bool:
+        logged_in = False
+
+        command, *arguments = data.split()
         cmd = Command(command, arguments)
         cmd.debug()
+        LOGGER.info(f"Command {command} issued by {self.client_address}")
 
         # If any error
         error_code = cmd.fn()
         if error_code != 0:
             self.handle_error(error_code)
             self.send_error_code(error_code)
-            return False
+            return logged_in
 
-        # If no error
-        self.request.sendall(f"OK {error_code}\r\n".encode("utf-8"))
-
-        # And the command was login, it means a user logged in
+        # If the command was login, and there was no error, it means a user logged in
         if command == "LOGIN":
-            LOGGER.info(f"User {arguments[0]} has logged in")
-            return True
+            username = arguments[0]
+            uuid = BANK.get_uuid(username)
+            self.send_ok_data(uuid)
+            LOGGER.info(f"User {username} has logged in")
+            logged_in = True
+            return logged_in
+
+        # If the command was register, and there was no error, send an OK message
+        if command == "REGISTER":
+            self.send_ok_data()
+
+        return logged_in
 
     def handle_post_login(self, data: str) -> bool:
         command, *arguments = data.split()
@@ -115,7 +126,7 @@ class BankServerHandler(BaseRequestHandler):
             self.send_error_code(error_code)
 
         # If no error
-        self.request.sendall(f"OK {error_code}\r\n".encode("utf-8"))
+        self.send_ok_data(uuid)
 
         # And the command was login, it means a user logged in
         return not command == "LOGOUT"
@@ -130,12 +141,11 @@ class BankServerHandler(BaseRequestHandler):
         # Handle pre-login
         logged = self.handle_pre_login(data)
 
-        # if logged:
-        # while True:
-        # Read data from buffer
-        #     data = self.request.recv(4096).decode("utf-8")
-        #     logged = self.handle_post_login()
-        #     pass
+        if logged:
+            while True:
+                # Read data from buffer
+                data = self.request.recv(4096).decode("utf-8")
+                logged = self.handle_post_login(data)
 
         self.finish()
 

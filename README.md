@@ -3,11 +3,14 @@
 ## Error codes
 
 - 0: No error
-- 1: Unknown command
-- 2: Invalid login (User not found or incorrect password)
-- 3: Invalid registration (User already registered)
-- 4: Not enough balance (Tried to withdraw more than it has)
-- 5: Invalid transfer (Unknown account)
+- 1: Invalid login (User not found or incorrect password)
+- 2: Invalid registration (User already registered)
+- 3: Insufficient funds (Tried to withdraw more than it has)
+- 4: Invalid transfer (Unknown account)
+
+- 252: UUID not found
+- 253: Bad arguments
+- 254: Unknown command
 - 255: Unknown error
 
 Assets taken from: https://www.flaticon.com/free-icons
