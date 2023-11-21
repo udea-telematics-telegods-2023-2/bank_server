@@ -42,13 +42,13 @@ class Command:
                 self.__arguments = []
 
     def debug(self):
-        if self.__error_code == 0:
-            LOGGER.info(
-                f"{self.__command} executed with args {self.__arguments}",
+        if self.fn != self.no_fn:
+            LOGGER.debug(
+                f"{self.__command} executed",
             )
 
     def no_fn(self, _=None) -> tuple[int, str]:
-        return 1, ""
+        return 254, ""
 
     def fn(self) -> tuple[int, str]:
         self.__error_code, data = self.__fn(*self.__arguments)
@@ -62,16 +62,18 @@ class BankServerHandler(BaseRequestHandler):
         error_msg = f"Error {error_code}: "
         match error_code:
             case 1:
-                error_msg += "Command not found"
-            case 2:
                 error_msg += "Invalid login"
-            case 3:
+            case 2:
                 error_msg += "Invalid registration"
-            case 4:
-                error_msg += "Not enough balance"
-            case 5:
-                error_msg += "Invalid transfer (Unknown account)"
-            case _:
+            case 3:
+                error_msg += "Insufficient funds"
+            case 252:
+                error_msg += "UUID not found"
+            case 253:
+                error_msg += "Bad arguments"
+            case 254:
+                error_msg += "Unknown command"
+            case 255:
                 error_msg += "Unknown error"
 
         LOGGER.error(error_msg)
@@ -91,7 +93,7 @@ class BankServerHandler(BaseRequestHandler):
         LOGGER.info(f"Command {command} issued by {self.client_address}")
 
         # If any error
-        error_code = cmd.fn()
+        error_code, cmd_return = cmd.fn()
         if error_code != 0:
             self.handle_error(error_code)
             self.send_error_code(error_code)
@@ -100,8 +102,7 @@ class BankServerHandler(BaseRequestHandler):
         # If the command was login, and there was no error, it means a user logged in
         if command == "LOGIN":
             username = arguments[0]
-            uuid = BANK.get_uuid(username)
-            self.send_ok_data(uuid)
+            self.send_ok_data(cmd_return)
             LOGGER.info(f"User {username} has logged in")
             logged_in = True
             return logged_in
@@ -120,13 +121,10 @@ class BankServerHandler(BaseRequestHandler):
         cmd.debug()
 
         # If any error
-        error_code = cmd.fn()
+        error_code, _ = cmd.fn()
         if error_code != 0:
             self.handle_error(error_code)
             self.send_error_code(error_code)
-
-        # If no error
-        self.send_ok_data(uuid)
 
         # And the command was login, it means a user logged in
         return not command == "LOGOUT"
@@ -193,13 +191,14 @@ if __name__ == "__main__":
         with open(PUBLIC_KEY_PATH, "rb") as PUBLIC_KEY_FILE:
             PUBLIC_KEY = key.PublicKey.load_pkcs1(PUBLIC_KEY_FILE.read())
 
+    global PUBLIC_KEY_PEM, SOCKETS_LIST, PUBLIC_KEYS_LIST, UUID_LIST, BANK
     PUBLIC_KEY_PEM = PUBLIC_KEY.save_pkcs1()
     SOCKETS_LIST = []
     PUBLIC_KEYS_LIST = {}
     UUID_LIST = {}
     BANK = Bank()
-    SERVER = ForkingTCPServer((SERVER_IP, int(PORT)), BankServerHandler)
 
+    SERVER = ForkingTCPServer((SERVER_IP, int(PORT)), BankServerHandler)
     LOGGER.info(f"Server listening on {SERVER_IP}:{PORT}")
 
     try:

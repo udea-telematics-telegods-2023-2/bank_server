@@ -11,7 +11,7 @@ class Bank:
     def register(self, username: str = "", password: str = "") -> tuple[int, str]:
         # Validate input
         if username == "" or password == "":
-            return 255, ""
+            return 253, ""
 
         # Validate free username
         username_free = self.__database.read(username=username) is None

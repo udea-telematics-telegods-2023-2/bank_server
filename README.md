@@ -6,7 +6,6 @@
 - 1: Invalid login (User not found or incorrect password)
 - 2: Invalid registration (User already registered)
 - 3: Insufficient funds (Tried to withdraw more than it has)
-- 4: Invalid transfer (Unknown account)
 
 - 252: UUID not found
 - 253: Bad arguments
