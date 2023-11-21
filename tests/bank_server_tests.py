@@ -1,7 +1,7 @@
 import unittest
 import argon2
 from src.db import User, UserDatabase
-from src.bank import UserDT, Bank
+from src.bank import Bank
 
 
 class TestBankDB(unittest.TestCase):
@@ -77,28 +77,25 @@ class TestBankAuth(unittest.TestCase):
     def setUp(self):
         self.database = UserDatabase()
         self.bank = Bank(self.database)
-        self.users = [UserDT(f"test_user{i}", "password") for i in range(1, 2)]
+        self.users = [(f"test_user{i}", "password") for i in range(1, 2)]
         self.uuids = []
         for user in self.users:
-            self.bank.register(user)
-            user_data = self.database.read(username=user.username)
+            self.bank.register(*user)
+            user_data = self.database.read(username=user[0])
             if user_data is not None:
                 self.uuids.append(user_data.get_data()[0])
 
     def test_user_login_with_correct_password(self):
-        self.assertTrue(self.bank.login(self.users[0]))
+        self.assertTrue(self.bank.login(*self.users[0]))
 
     def test_user_login_with_incorrect_password(self):
-        wrong_password_user = UserDT(
-            self.users[0].username,
+        wrong_password_user = (
+            self.users[0][0],
             "wrong_password",
         )
-        self.assertFalse(self.bank.login(wrong_password_user))
+        self.assertFalse(self.bank.login(*wrong_password_user))
 
     def test_change_password_correctly(self):
-        # current_password = self.user1.password
-        # new_password = "new_password"
-        # self.bank.change_password(uuid=self.uuid2, old_password=current_password, new_password=new_password)
         pass
 
     def test_change_password_failure(self):
@@ -118,11 +115,11 @@ class TestBankTransactions(unittest.TestCase):
     def setUp(self):
         self.database = UserDatabase()
         self.bank = Bank(self.database)
-        self.users = [UserDT(f"test_user{i}", "password") for i in range(1, 3)]
+        self.users = [(f"test_user{i}", "password") for i in range(1, 3)]
         self.uuids = []
         for user in self.users:
-            self.bank.register(user)
-            user_data = self.database.read(username=user.username)
+            self.bank.register(*user)
+            user_data = self.database.read(username=user[0])
             if user_data is not None:
                 self.uuids.append(user_data.get_data()[0])
 
