@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Default RSA keys
+id_rsa*
+
 # C extensions
 *.so
 
