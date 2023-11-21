@@ -1,8 +1,7 @@
-from src.db import User, UserDatabase
-from dataclasses import dataclass
-from uuid import uuid4
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+from src.db import User, UserDatabase
+from uuid import uuid4
 
 
 class Bank:
