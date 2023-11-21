@@ -23,24 +23,6 @@ class Formatter(logging.Formatter):
 
 
 class Command:
-    def __init__(self, command: str, arguments: list):
-        self.__command = command
-        self.__arguments = arguments
-        self.__fn = self.no_fn
-
-        match self.__command:
-            case "LOGIN":
-                self.__fn = BANK.login
-
-            case "REGISTER":
-                self.__fn = BANK.register
-
-            case "DEPOSIT":
-                self.__fn = BANK.deposit
-
-            case _:
-                self.__arguments = []
-
     def debug(self):
         if self.fn != self.no_fn:
             LOGGER.debug(
@@ -49,6 +31,48 @@ class Command:
 
     def no_fn(self, _=None) -> tuple[int, str]:
         return 254, ""
+
+    def wrong_args(self, _=None) -> tuple[int, str]:
+        return 253, ""
+
+    def __check_args(self, args_number: int = 0, fn=no_fn):
+        if len(self.__arguments) != args_number:
+            self.__fn = self.wrong_args
+        else:
+            self.__fn = fn
+
+    def __init__(self, command: str, arguments: list):
+        self.__command = command
+        self.__arguments = arguments
+        self.__fn = self.no_fn
+
+        match self.__command:
+            case "LOGIN":
+                self.__check_args(args_number=2, fn=BANK.login)
+
+            case "REGISTER":
+                self.__check_args(args_number=2, fn=BANK.register)
+
+            case "CHPASSWD":
+                self.__check_args(args_number=3, fn=BANK.change_password)
+
+            case "BALANCE":
+                self.__check_args(args_number=1, fn=BANK.balance)
+
+            case "DEPOSIT":
+                self.__check_args(args_number=2, fn=BANK.deposit)
+
+            case "WITH":
+                self.__check_args(args_number=2, fn=BANK.withdraw)
+
+            case "TRANSFER":
+                self.__check_args(args_number=3, fn=BANK.transfer)
+
+            case "LOGOUT":
+                self.__check_args(args_number=0, fn=BANK.logout)
+
+            case _:
+                self.__arguments = []
 
     def fn(self) -> tuple[int, str]:
         self.__error_code, data = self.__fn(*self.__arguments)
@@ -120,14 +144,15 @@ class BankServerHandler(BaseRequestHandler):
         cmd = Command(command, arguments)
         cmd.debug()
 
-        # If any error
-        error_code, _ = cmd.fn()
+        error_code, cmd_return = cmd.fn()
         if error_code != 0:
             self.handle_error(error_code)
             self.send_error_code(error_code)
 
+        self.send_ok_data(cmd_return)
+
         # And the command was login, it means a user logged in
-        return not command == "LOGOUT"
+        return not (command == "LOGOUT")
 
     def handle(self):
         LOGGER.info(f"Accepted connection from {self.client_address}")
@@ -139,11 +164,10 @@ class BankServerHandler(BaseRequestHandler):
         # Handle pre-login
         logged = self.handle_pre_login(data)
 
-        if logged:
-            while True:
-                # Read data from buffer
-                data = self.request.recv(4096).decode("utf-8")
-                logged = self.handle_post_login(data)
+        while logged:
+            # Read data from buffer
+            data = self.request.recv(4096).decode("utf-8")
+            logged = self.handle_post_login(data)
 
         self.finish()
 

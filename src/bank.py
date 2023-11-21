@@ -44,29 +44,49 @@ class Bank:
         except VerifyMismatchError:
             return 1, ""
 
-    def change_password(self, uuid: str, old_password: str, new_password: str) -> bool:
-        return True
-
-    def balance(self, uuid: str) -> tuple[int, str]:
-        user_data = self.__database.read(uuid)
-        if user_data is None:
-            return False, str(0.0)
-        return True, str(user_data.get_data()[3])
-
-    def deposit(self, uuid: str, amount: float) -> tuple[int, str]:
-        self.__database.update(uuid, delta_balance=amount)
+    def logout(self) -> tuple[int, str]:
         return 0, ""
 
-    def withdraw(self, uuid: str, amount: float) -> tuple[int, str]:
+    def change_password(
+        self, uuid: str = "", old_password: str = "", new_password: str = ""
+    ) -> tuple[int, str]:
+        user_data = self.__database.read(uuid)
+        if user_data is None:
+            return 252, ""
+        login_error_code, _ = self.login(user_data.get_data()[1], old_password)
+        if login_error_code != 0:
+            return login_error_code, ""
+        self.__database.update(uuid, new_password)
+        return 0, ""
+
+    def balance(self, uuid: str = "") -> tuple[int, str]:
+        if uuid == "":
+            return 253, ""
+        user_data = self.__database.read(uuid)
+        if user_data is None:
+            return 252, ""
+        return 0, str(user_data.get_data()[3])
+
+    def deposit(self, uuid: str = "", amount: str = "") -> tuple[int, str]:
+        if uuid == "" or amount == "":
+            return 253, ""
+        self.__database.update(uuid, delta_balance=float(amount))
+        return 0, ""
+
+    def withdraw(self, uuid: str = "", amount: str = "") -> tuple[int, str]:
+        if uuid == "" or amount == "":
+            return 253, ""
         balance = float(self.balance(uuid)[1])
-        if balance - amount < 0.0:
+        if balance - float(amount) < 0.0:
             return 3, ""
-        self.__database.update(uuid=uuid, delta_balance=-amount)
+        self.__database.update(uuid=uuid, delta_balance=-float(amount))
         return 0, ""
 
     def transfer(
-        self, sender_uuid: str, receiver_uuid: str, amount: float
+        self, sender_uuid: str = "", receiver_uuid: str = "", amount: str = ""
     ) -> tuple[int, str]:
+        if sender_uuid == "" or receiver_uuid == "" or amount == "":
+            return 253, ""
         # Verify that receiver account exists
         if self.__database.read(uuid=receiver_uuid) is None:
             return 252, ""
