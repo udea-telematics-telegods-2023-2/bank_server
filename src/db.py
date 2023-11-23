@@ -51,12 +51,8 @@ class UserDatabase:
     Methods:
         create(user: User): Inserts a new user into the database.
         read(uuid: str): Reads an existing user from the database.
-        update(uuid: str, password: str, delta_balance: float): Updates a password or adds to the balance of an existing user.
+        update(uuid: str, password: str, delta_balance: float): Updates a password and/or adds to the balance of an existing user.
         delete(uuid: str): Removes an existing user from the database.
-
-    Note:
-        This class assumes the existence of a 'bank' table in the database with columns
-        'uuid', 'username', 'hash', and 'balance'.
     """
 
     def __init__(self, db_path: str = f"{PROJECT_ROOT}/db/bank.db"):
@@ -73,13 +69,13 @@ class UserDatabase:
         with sqlite3.connect(self.__db_path) as connection:
             connection.execute(
                 """
-                        CREATE TABLE IF NOT EXISTS bank (
-                            uuid TEXT PRIMARY KEY,
-                            username TEXT UNIQUE,
-                            hash TEXT,
-                            balance REAL
-                        );
-                    """
+                    CREATE TABLE IF NOT EXISTS bank (
+                        uuid TEXT PRIMARY KEY,
+                        username TEXT UNIQUE,
+                        hash TEXT,
+                        balance REAL
+                    );
+                """
             )
 
     def create(self, user: User):
@@ -135,7 +131,8 @@ class UserDatabase:
             NameError: If the user with the specified UUID is not found.
 
         Note:
-            If both 'password' and 'delta_balance' are provided, the function updates both.
+            At least one parameter between 'password' and 'delta_balance' has to be provided,
+            If both 'password' and 'delta_balance' are provided, the function updates both
         """
 
         def __update_password(uuid: str, password: str):
@@ -186,6 +183,12 @@ class UserDatabase:
             __update_balance(uuid, delta_balance)
 
     def delete(self, uuid: str):
+        """
+        Deletes a user from the 'bank' table based on the provided UUID.
+
+        Args:
+            uuid (str): The UUID of the user to be deleted.
+        """
         with sqlite3.connect(self.__db_path) as connection:
             connection.execute(
                 """
