@@ -249,3 +249,55 @@ class Bank:
             return self.deposit(uuid=receiver_uuid, amount=amount)
 
         return withdraw_error_code, ""
+
+    def pay(
+        self,
+        sender_uuid: str = "",
+        receiver_uuid: str = "",
+        amount: str = "",
+        password: str = "",
+    ) -> tuple[int, str]:
+        """
+        Commits a payment, a transfer with included password
+
+        Args:
+            sender_uuid (str): The UUID of the sender.
+            receiver_uuid (str): The UUID of the receiver.
+            amount (str): The amount to transfer.
+            password (str): The password of the sender account.
+
+        Returns:
+            tuple[int, str]: A tuple containing the error code and additional information.
+
+        Notes:
+            Error codes:
+                0: Success
+                252: User not found in the database
+                253: Invalid input
+        """
+        # Validate input
+        if sender_uuid == "" or receiver_uuid == "" or amount == "":
+            return 253, ""
+
+        # Verify that receiver account exists
+        if self.__database.read(uuid=receiver_uuid) is None:
+            return 252, ""
+
+        # Verify that sender account exists and its password is correct
+        user = self.__database.read(uuid=sender_uuid)
+        if user is None:
+            return 253, ""
+        username = user.get_data()[1]
+
+        login_error_code, _ = self.login(username, password)
+
+        if login_error_code != 0:
+            return login_error_code, ""
+
+        # Check funds
+        withdraw_error_code, _ = self.withdraw(uuid=sender_uuid, amount=amount)
+
+        if withdraw_error_code == 0:
+            return self.deposit(uuid=receiver_uuid, amount=amount)
+
+        return withdraw_error_code, ""
