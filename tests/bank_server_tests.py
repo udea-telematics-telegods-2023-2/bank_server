@@ -218,7 +218,7 @@ class TestBankTransactions(unittest.TestCase):
 
         # Deposit enough funds
         deposit_amount = 5000
-        self.bank.deposit(uuid=uuid1, amount=deposit_amount)
+        self.bank.deposit(uuid=uuid1, amount=str(deposit_amount))
 
         # Check balance before transfer
         _, old_balance1 = self.bank.balance(uuid=uuid1)
@@ -227,7 +227,7 @@ class TestBankTransactions(unittest.TestCase):
         # Transfer from test_user5 to test_user6
         transfer_amount = deposit_amount
         transfer_error_code, _ = self.bank.transfer(
-            sender_uuid=uuid1, receiver_uuid=uuid2, amount=transfer_amount
+            sender_uuid=uuid1, receiver_uuid=uuid2, amount=str(transfer_amount)
         )
 
         # Error 0 is no error
