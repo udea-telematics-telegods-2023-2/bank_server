@@ -88,16 +88,12 @@ class Bank:
         except VerifyMismatchError:
             return 1, ""
 
-    def logout(self) -> tuple[int, str]:
+    def logout(self, _) -> tuple[int, str]:
         """
         Logs out the current user.
 
         Returns:
             tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
         """
         return 0, ""
 
@@ -121,6 +117,10 @@ class Bank:
                 252: User not found in the database
                 253: Old password doesn't match new password
         """
+        # Validate input
+        if uuid == "":
+            return 253, ""
+
         # User doesn't exists
         user_data = self.__database.read(uuid)
         if user_data is None:

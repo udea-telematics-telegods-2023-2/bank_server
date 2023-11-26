@@ -130,7 +130,7 @@ class Command:
                 self.__check_args(args_number=3, fn=BANK.transfer)
 
             case "LOGOUT":
-                self.__check_args(args_number=0, fn=BANK.logout)
+                self.__check_args(args_number=1, fn=BANK.logout)
 
             case "PAY":
                 self.__check_args(args_number=4, fn=BANK.pay)
@@ -224,7 +224,7 @@ class BankTCPServerHandler(BaseRequestHandler):
         global connected_users
         del connected_users[client_address]
         LOGGER.info(f"User {self.username} has logged out")
-        return False
+        return True
 
     def handle_post_login(self, data: str) -> bool:
         # Extracts command and data from input
@@ -245,13 +245,14 @@ class BankTCPServerHandler(BaseRequestHandler):
             error_code = 251
             self.handle_error(error_code)
             self.send_error_code(error_code)
-            return self.handle_logout(self.client_address)
+            return False
 
         # Handle other errors
         error_code, cmd_return = cmd.fn()
         if error_code != 0:
             self.handle_error(error_code)
             self.send_error_code(error_code)
+            return False
 
         # If no errors, answer with OK
         self.send_ok_data(cmd_return)
@@ -260,31 +261,38 @@ class BankTCPServerHandler(BaseRequestHandler):
         if command == "LOGOUT":
             return self.handle_logout(self.client_address)
 
-        return not (command == "LOGOUT")
+        return False
 
     def handle(self):
         LOGGER.info(f"Accepted connection from {self.client_address}")
+        logged = False
+        logout = False
 
-        # Read data from buffer
-        data = self.request.recv(4096).decode("utf-8")
+        while not logout:
+            if not logged:
+                # Read data from buffer
+                data = self.request.recv(4096).decode("utf-8")
 
-        # Checks non-empty message
-        if len(data) <= 2:
-            LOGGER.warning("Empty message")
-            return
+                # Checks non-empty message
+                if len(data) <= 2:
+                    LOGGER.warning("Empty message")
+                    continue
 
-        # Handle pre-login
-        logged = self.handle_pre_login(data)
+                # Handle pre-login
+                logged = self.handle_pre_login(data)
+            else:
+                # Read data from buffer
+                data = self.request.recv(4096)
 
-        # Keep session open if the user is logged in
-        while logged:
-            # Read data from buffer
-            data = self.request.recv(4096)
+                # Checks non-empty message
+                if len(data) <= 2:
+                    LOGGER.warning("Empty message")
 
-            # Check if client disconnected
-            if not data:
-                break
-            logged = self.handle_post_login(data.decode("utf-8"))
+                # Check if client disconnected
+                if not data:
+                    break
+
+                logout = self.handle_post_login(data.decode("utf-8"))
 
         self.finish()
 
@@ -402,19 +410,23 @@ def setup_logger():
 
 
 if __name__ == "__main__":
-    # Enable debugging and configure it
+    # Enable logger and configure it
     LOGGER = setup_logger()
 
+    # Check correct number or arguments
     if len(argv) != 3:
         LOGGER.info("Usage: server.py <server_IP> <port>")
         exit(1)
 
+    # Extract arguments
     SERVER_IP, PORT = argv[1:]
 
+    # Declare global variables and initialize them
     global BANK, connected_users
     BANK = Bank()
     connected_users = {}
 
+    # Create servers and their threads
     UDP_SERVER = ForkingUDPServer((SERVER_IP, int(PORT)), BankUDPServerHandler)
     TCP_SERVER = ForkingTCPServer((SERVER_IP, int(PORT)), BankTCPServerHandler)
     udp_thread = Thread(target=UDP_SERVER.serve_forever)
@@ -432,6 +444,7 @@ if __name__ == "__main__":
         udp_thread.join()
 
     except KeyboardInterrupt:
+        # Empty print to not have the ^C in the same line as the warn
         print("")
         LOGGER.warning("Stopping server, please wait...")
 
