@@ -77,7 +77,7 @@ class Command:
         """
         if self.fn != self.no_fn:
             LOGGER.debug(
-                f"{self.__command} executed",
+                f"{self.__command}:{self.__arguments} executed",
             )
 
     def no_fn(self, _=None) -> tuple[int, str]:
@@ -91,6 +91,12 @@ class Command:
         Default function for wrong_number of arguments.
         """
         return 253, ""
+
+    def hi(self, _=None) -> tuple[int, str]:
+        """
+        Function that handles first connection.
+        """
+        return 0, "bank"
 
     def __check_args(self, args_number: int = 0, fn=no_fn):
         """
@@ -108,6 +114,9 @@ class Command:
         self.__fn = self.no_fn
 
         match self.__command:
+            case "HI":
+                self.__check_args(args_number=0, fn=self.hi)
+
             case "LOGIN":
                 self.__check_args(args_number=2, fn=BANK.login)
 
@@ -197,11 +206,9 @@ class BankTCPServerHandler(BaseRequestHandler):
             self.send_error_code(error_code)
             return logged_in
 
+        self.send_ok_data(cmd_return)
         # If the command was login, and there was no error, it means a user logged in
         if command == "LOGIN":
-            # Replies with UUID
-            self.send_ok_data(cmd_return)
-
             # Updates connected_users dictionary
             global connected_users
             connected_users[self.client_address] = cmd_return
@@ -210,12 +217,8 @@ class BankTCPServerHandler(BaseRequestHandler):
             self.username = arguments[0]
             self.uuid = cmd_return
             LOGGER.info(f"User {self.username} has logged in")
+            LOGGER.debug(connected_users)
             logged_in = True
-            return logged_in
-
-        # If the command was register, and there was no error, send an OK message
-        if command == "REGISTER":
-            self.send_ok_data()
 
         return logged_in
 
@@ -224,6 +227,7 @@ class BankTCPServerHandler(BaseRequestHandler):
         global connected_users
         del connected_users[client_address]
         LOGGER.info(f"User {self.username} has logged out")
+        LOGGER.debug(connected_users)
         return True
 
     def handle_post_login(self, data: str) -> bool:
@@ -238,40 +242,46 @@ class BankTCPServerHandler(BaseRequestHandler):
             arguments = [self.uuid]
 
         cmd = Command(command, arguments)
-        cmd.debug()
+        # cmd.debug()
 
         # Check connected user and command UUID
-        if not self.check_user(arguments[0], connected_users[self.client_address]):
+        if command != "LOGIN" and not self.check_user(
+            arguments[0], connected_users[self.client_address]
+        ):
             error_code = 251
             self.handle_error(error_code)
             self.send_error_code(error_code)
-            return False
+            return True
 
         # Handle other errors
         error_code, cmd_return = cmd.fn()
         if error_code != 0:
             self.handle_error(error_code)
             self.send_error_code(error_code)
-            return False
+            return True
 
         # If no errors, answer with OK
         self.send_ok_data(cmd_return)
 
         # Handle logout
         if command == "LOGOUT":
-            return self.handle_logout(self.client_address)
-
-        return False
+            self.handle_logout(self.client_address)
+            return False
+        return True
 
     def handle(self):
         LOGGER.info(f"Accepted connection from {self.client_address}")
         logged = False
-        logout = False
 
-        while not logout:
+        while True:
             if not logged:
                 # Read data from buffer
                 data = self.request.recv(4096).decode("utf-8")
+
+                # Check if client disconnected
+                if not data:
+                    LOGGER.info(f"Finished connection from {self.client_address}")
+                    break
 
                 # Checks non-empty message
                 if len(data) <= 2:
@@ -284,15 +294,18 @@ class BankTCPServerHandler(BaseRequestHandler):
                 # Read data from buffer
                 data = self.request.recv(4096)
 
+                # Check if client disconnected
+                if not data:
+                    self.handle_logout(self.client_address)
+                    LOGGER.info(f"Finished connection from {self.client_address}")
+                    break
+
                 # Checks non-empty message
                 if len(data) <= 2:
                     LOGGER.warning("Empty message")
+                    continue
 
-                # Check if client disconnected
-                if not data:
-                    break
-
-                logout = self.handle_post_login(data.decode("utf-8"))
+                logged = self.handle_post_login(data.decode("utf-8"))
 
         self.finish()
 
