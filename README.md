@@ -8,6 +8,7 @@
 - 1: Invalid login (User not found or incorrect password)
 - 2: Invalid registration (User already registered)
 - 3: Insufficient funds (Tried to withdraw or transfer more than it has)
+- 4: Insufficient stock (Not enough liquor)
 
 ### Client error codes
 

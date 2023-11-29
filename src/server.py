@@ -2,10 +2,11 @@
 from socket import socket
 from socketserver import ForkingTCPServer, ForkingUDPServer, BaseRequestHandler
 from src.bank import Bank
+from src.utils import setup_logger
+from string import ascii_lowercase
 from sys import argv, exit
 from random import randint
 from threading import Thread
-from utils import setup_logger
 
 
 class Command:
@@ -292,19 +293,36 @@ class BankUDPServerHandler(BaseRequestHandler):
 
         LOGGER.error(error_msg)
 
-    def encrypt(self, msg: str, n: int) -> str:
-        return msg
+    def encrypt(self, msg: str, n: int):
+        result = ""
+        for char in msg:
+            if char.isalpha():
+                # Shift letters
+                if char.islower():
+                    result += chr((ord(char) - ord("a") + n) % 26 + ord("a"))
+                else:
+                    result += chr((ord(char) - ord("A") + n) % 26 + ord("A"))
+            elif char.isdigit():
+                # Shift numbers
+                result += chr((ord(char) - ord("0") + n) % 10 + ord("0"))
+            else:
+                # Keep spaces unchanged
+                result += char
+        return result
 
     def decrypt(self, msg: str, n: int) -> str:
-        return msg
+        return self.encrypt(msg, -n)
 
     def send_encrypted_data(self, conn, to, n: int, encrypted_msg: str):
-        conn.sendto(self.encrypt(f"{encrypted_msg} {n}\r\n", n).encode("utf-8"), to)
+        LOGGER.debug(f"encrypted message: {encrypted_msg} {n}\r\n")
+        conn.sendto(f"{encrypted_msg} {n}\r\n".encode("utf-8"), to)
 
     def send_error_code(self, conn, to: socket, n: int, error_code: int = 255):
+        LOGGER.debug(f"error_code: {error_code}")
         self.send_encrypted_data(conn, to, n, self.encrypt(f"ERR {error_code}", n))
 
     def send_ok_data(self, conn, to: socket, n: int, ok_data: str = ""):
+        LOGGER.debug(f"ok_data: {ok_data}")
         self.send_encrypted_data(conn, to, n, self.encrypt(f"OK {ok_data}", n))
 
     def handle(self):
@@ -327,12 +345,14 @@ class BankUDPServerHandler(BaseRequestHandler):
             return
 
         # Decrypt using the decode number
-        decrypted_data = self.decrypt(decoded_data, n)
+        decrypted_data = self.decrypt(decoded_data, int(n))
+        LOGGER.debug(f"Decrypted data: {decrypted_data}")
 
         # Generate random n for answer
-        rand_n = randint(1, 26)
+        rand_n = randint(1, 25)
+        LOGGER.debug(f"N: {rand_n}")
         # n = 0 means no encryption
-        rand_n = 0
+        # rand_n = 0
 
         # Validate the only command accepted through UDP
         if decrypted_data.startswith("PAY"):
