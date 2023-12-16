@@ -1,6 +1,6 @@
 # TeleGods Bank Server
 
-TeleGods Bank Server is part of the "Servicios Telemáticos" course final project
+TeleGods Bank Server is part of the final project of the "Servicios Telemáticos" course
 at Universidad de Antioquia. The assignment involves building three
 applications: a bank server, a liquor store server, and a client for these two.
 Each application is containerized and designed for easy deployment.
