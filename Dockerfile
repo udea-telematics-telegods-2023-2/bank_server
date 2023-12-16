@@ -28,5 +28,8 @@ RUN poetry env use 3.10
 # Install project dependencies
 RUN poetry install --no-root
 
+# Generate a self-signed SSL certificate
+RUN mkdir credentials
+
 # Set the command to run your application
-CMD ["poetry", "run", "python", "-m", "src.server", "0.0.0.0", "8888"]
+CMD ["poetry", "run", "python", "-m", "src.server"]
