@@ -5,6 +5,8 @@ __pycache__/
 
 # Default RSA keys
 id_rsa*
+*.key
+*.crt
 
 # C extensions
 *.so
