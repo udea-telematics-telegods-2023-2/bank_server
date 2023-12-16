@@ -1,4 +1,6 @@
+import argparse
 import logging
+from ipaddress import IPv4Address
 from pathlib import Path
 
 
@@ -65,3 +67,23 @@ def setup_logger():
     logger.addHandler(ch)
 
     return logger
+
+
+def setup_parser(**kwargs):
+    parser = argparse.ArgumentParser(**kwargs)
+    parser.add_argument("--ip_address", default="0.0.0.0", type=IPv4Address)
+    parser.add_argument("--port", default="8888", type=int)
+    parser.add_argument("--certfile", default="./certs/telegods_bank.crt", type=Path)
+    parser.add_argument("--keyfile", default="./certs/telegods_bank.key", type=Path)
+
+    args = parser.parse_args()
+
+    # Check if certfile exists
+    if not args.certfile.exists():
+        parser.error(f"Certfile not found: {args.certfile}")
+
+    # Check if keyfile exists
+    if not args.keyfile.exists():
+        parser.error(f"Keyfile not found: {args.keyfile}")
+
+    return args
