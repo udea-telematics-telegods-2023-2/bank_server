@@ -1,7 +1,25 @@
+# Standard library modules
+from pathlib import Path
+from uuid import uuid4
+
+# Third party modules
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+
+# Local modules
 from src.db import User, UserDatabase
-from uuid import uuid4
+from src.utils import setup_logger, ErrorCode
+
+# Globals
+OK = ErrorCode.OK
+INVALID_REGISTRATION = ErrorCode.INVALID_REGISTRATION
+INVALID_LOGIN = ErrorCode.INVALID_LOGIN
+SESSION_CONFLICT = ErrorCode.SESSION_CONFLICT
+INSUFFICIENT_FUNDS = ErrorCode.INSUFFICIENT_FUNDS
+INSUFFICIENT_STOCK = ErrorCode.INSUFFICIENT_STOCK
+UUID_NOT_FOUND = ErrorCode.UUID_NOT_FOUND
+BAD_ARGUMENTS = ErrorCode.BAD_ARGUMENTS
+UNKNOWN_ERROR = ErrorCode.UNKNOWN_ERROR
 
 
 class Bank:
@@ -12,16 +30,30 @@ class Bank:
         database (UserDatabase): The database to store user information.
     """
 
-    def __init__(self, database: UserDatabase = UserDatabase()):
+    def __init__(self, dbpath: Path, verbose: bool = False):
         """
         Initializes a new instance of the Bank class.
 
         Args:
             database (UserDatabase): The database to store user information.
+            connected_users (dict): The UUIDs that are using the bank at the moment.
         """
-        self.__database = database
+        self.__logger = setup_logger(name="bank", verbose=verbose)
+        self.__logger.debug("Instantiating new Bank")
 
-    def register(self, username: str = "", password: str = "") -> tuple[int, str]:
+        self.__database = UserDatabase(dbpath=dbpath, verbose=verbose)
+        self.__connected_users = set()
+
+    def get_db(self) -> UserDatabase:
+        """
+        Returns the DB.
+
+        Returns:
+            UserDatabase: The internal database object.
+        """
+        return self.__database
+
+    def register(self, username: str = "", password: str = "") -> tuple[ErrorCode, str]:
         """
         Registers a new user in the system.
 
@@ -30,29 +62,52 @@ class Bank:
             password (str): The plain-text password for the new user.
 
         Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
-                2: Username already taken
-                253: Invalid input
+            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        # Validate input
-        if username == "" or password == "":
-            return 253, ""
-
-        # Validate free username
-        username_free = self.__database.read(username=username) is None
-        if not username_free:
-            return 2, ""
-
-        self.__database.create(
-            User(str(uuid4()), username, PasswordHasher().hash(password))
+        self.__logger.debug(
+            f"Registering new user with username = {username}, password = {password}"
         )
-        return 0, ""
 
-    def login(self, username: str = "", password: str = "") -> tuple[int, str]:
+        # Check empty fields
+        if username == "" or password == "":
+            return BAD_ARGUMENTS, ""
+
+        # User is already registered
+        user_data = self.__database.read(username=username)
+        if user_data is not None:
+            return INVALID_REGISTRATION, ""
+
+        # Perform registration
+        self.__database.create(
+            User(
+                uuid=uuid4().hex,
+                username=username,
+                password=PasswordHasher().hash(password),
+            )
+        )
+        return OK, ""
+
+    def logout(self, uuid: str = "") -> tuple[ErrorCode, str]:
+        """
+        Logs out the specified user.
+
+        Returns:
+            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
+        """
+        self.__logger.debug(f"Logging out user with uuid = {uuid}")
+
+        # Check empty fields
+        if uuid == "":
+            return BAD_ARGUMENTS, ""
+
+        # UUID not logged in
+        if uuid not in self.__connected_users:
+            return UUID_NOT_FOUND, ""
+
+        self.__connected_users.remove(uuid)
+        return OK, ""
+
+    def login(self, username: str = "", password: str = "") -> tuple[ErrorCode, str]:
         """
         Logs in an existing user.
 
@@ -61,45 +116,42 @@ class Bank:
             password (str): The plain-text password of the user.
 
         Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
-                1: User doesn't exist
-                253: Invalid input
+            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        # Validate input
-        if username == "" or password == "":
-            return 253, ""
+        self.__logger.debug(
+            f"Logging in user with username = {username} and password = {password}"
+        )
 
-        # User doesn't exists
+        # Check empty fields
+        if username == "" or password == "":
+            return BAD_ARGUMENTS, ""
+
+        # User is not registered
         user_data = self.__database.read(username=username)
         if user_data is None:
-            return 1, ""
+            return INVALID_LOGIN, ""
 
         # We need to use a try/except because argon2 raises
-        # exceptions when a verification fails
+        # an exception when a verification fails
         try:
-            hash = user_data.get_data()[2]
+            hash = user_data.password
             PasswordHasher().verify(hash, password)
-            uuid = user_data.get_data()[0]
-            return 0, uuid
+
         except VerifyMismatchError:
-            return 1, ""
+            return INVALID_LOGIN, ""
 
-    def logout(self, _) -> tuple[int, str]:
-        """
-        Logs out the current user.
+        else:
+            # Check if user is not already connected
+            uuid = user_data.uuid
+            if uuid in self.__connected_users:
+                return SESSION_CONFLICT, ""
 
-        Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-        """
-        return 0, ""
+            self.__connected_users.add(uuid)
+            return OK, uuid
 
     def change_password(
         self, uuid: str = "", old_password: str = "", new_password: str = ""
-    ) -> tuple[int, str]:
+    ) -> tuple[ErrorCode, str]:
         """
         Changes the password for a user.
 
@@ -109,32 +161,32 @@ class Bank:
             new_password (str): The new plain-text password.
 
         Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
-                252: User not found in the database
-                253: Old password doesn't match new password
+            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        # Validate input
-        if uuid == "":
-            return 253, ""
+        self.__logger.debug(
+            f"Changing password for user with uuid = {uuid} and passwords = {old_password} {new_password}"
+        )
 
-        # User doesn't exists
-        user_data = self.__database.read(uuid)
+        # Check empty fields
+        if uuid == "" or old_password == "" or new_password == "":
+            return BAD_ARGUMENTS, ""
+
+        # User is not registered
+        user_data = self.__database.read(uuid=uuid)
         if user_data is None:
-            return 252, ""
+            return UUID_NOT_FOUND, ""
 
         # Validate passwords
-        login_error_code, _ = self.login(user_data.get_data()[1], old_password)
+        login_error_code, _ = self.login(
+            username=user_data.username, password=old_password
+        )
         if login_error_code != 0:
             return login_error_code, ""
 
-        self.__database.update(uuid, new_password)
-        return 0, ""
+        self.__database.update(uuid=uuid, password=new_password)
+        return OK, ""
 
-    def balance(self, uuid: str = "") -> tuple[int, str]:
+    def balance(self, uuid: str = "") -> tuple[ErrorCode, str]:
         """
         Retrieves the balance for a user.
 
@@ -142,162 +194,157 @@ class Bank:
             uuid (str): The UUID of the user.
 
         Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
-                252: User not found in the database
-                253: Invalid input
+            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
+        self.__logger.debug(f"Checking balance for user with uuid = {uuid}")
+
         # Validate input
         if uuid == "":
-            return 253, ""
+            return BAD_ARGUMENTS, ""
 
         # User doesn't exists
-        user_data = self.__database.read(uuid)
+        user_data = self.__database.read(uuid=uuid)
         if user_data is None:
-            return 252, ""
+            return UUID_NOT_FOUND, ""
 
-        return 0, str(user_data.get_data()[3])
+        return OK, str(user_data.balance)
 
-    def deposit(self, uuid: str = "", amount: str = "") -> tuple[int, str]:
+    def deposit(self, uuid: str = "", amount: float = 0.0) -> tuple[ErrorCode, str]:
         """
         Deposits money into a user's account.
 
         Args:
             uuid (str): The UUID of the user.
-            amount (str): The amount to deposit.
+            amount (float): The amount to deposit.
 
         Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
-                252: User not found in the database
-                253: Invalid input
+            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
+        self.__logger.debug(
+            f"Adding funds for user with uuid = {uuid} with amount = {amount}"
+        )
+
         # Validate input
-        if uuid == "" or amount == "":
-            return 253, ""
+        if uuid == "" or amount == 0.0:
+            return BAD_ARGUMENTS, ""
 
-        self.__database.update(uuid, delta_balance=float(amount))
-        return 0, ""
+        self.__database.update(uuid=uuid, delta_balance=amount)
+        return OK, ""
 
-    def withdraw(self, uuid: str = "", amount: str = "") -> tuple[int, str]:
+    def withdraw(self, uuid: str = "", amount: float = 0.0) -> tuple[ErrorCode, str]:
         """
         Withdraws money from a user's account.
 
         Args:
             uuid (str): The UUID of the user.
-            amount (str): The amount to withdraw.
+            amount (float): The amount to withdraw.
 
         Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
-                3: Insufficient funds
-                253: Invalid input
+            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
+        self.__logger.debug(
+            f"Withdrawing funds from user with uuid = {uuid} with amount = {amount}"
+        )
+
         # Validate input
-        if uuid == "" or amount == "":
-            return 253, ""
+        if uuid == "" or amount <= 0.0:
+            return BAD_ARGUMENTS, ""
 
         # Check funds
-        balance = float(self.balance(uuid)[1])
-        if balance - float(amount) < 0.0:
-            return 3, ""
+        error_code, balance = self.balance(uuid)
+        if error_code != OK:
+            return UUID_NOT_FOUND, ""
+
+        balance = float(balance)
+        if balance - amount < 0.0:
+            return INSUFFICIENT_FUNDS, ""
 
         self.__database.update(uuid=uuid, delta_balance=-float(amount))
-        return 0, ""
+        return OK, ""
 
     def transfer(
-        self, sender_uuid: str = "", receiver_uuid: str = "", amount: str = ""
-    ) -> tuple[int, str]:
+        self, sender_uuid: str = "", receiver_uuid: str = "", amount: float = 0.0
+    ) -> tuple[ErrorCode, str]:
         """
         Transfers money from one user to another.
 
         Args:
             sender_uuid (str): The UUID of the sender.
             receiver_uuid (str): The UUID of the receiver.
-            amount (str): The amount to transfer.
+            amount (float): The amount to transfer.
 
         Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
-                252: User not found in the database
-                253: Invalid input
+            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
+        self.__logger.debug(
+            f"Transfering funds from user with uuid = {sender_uuid} to user with uuid = {receiver_uuid} with amount = {amount}"
+        )
+
         # Validate input
-        if sender_uuid == "" or receiver_uuid == "" or amount == "":
-            return 253, ""
+        if sender_uuid == "" or receiver_uuid == "" or amount == 0.0:
+            return BAD_ARGUMENTS, ""
 
         # Verify that receiver account exists
         if self.__database.read(uuid=receiver_uuid) is None:
-            return 252, ""
+            return UUID_NOT_FOUND, ""
 
         # Check funds
         withdraw_error_code, _ = self.withdraw(uuid=sender_uuid, amount=amount)
 
-        if withdraw_error_code == 0:
+        if withdraw_error_code == OK:
             return self.deposit(uuid=receiver_uuid, amount=amount)
 
         return withdraw_error_code, ""
 
-    def pay(
-        self,
-        sender_uuid: str = "",
-        receiver_uuid: str = "",
-        amount: str = "",
-        password: str = "",
-    ) -> tuple[int, str]:
-        """
-        Commits a payment, a transfer with included password
 
-        Args:
-            sender_uuid (str): The UUID of the sender.
-            receiver_uuid (str): The UUID of the receiver.
-            amount (str): The amount to transfer.
-            password (str): The password of the sender account.
-
-        Returns:
-            tuple[int, str]: A tuple containing the error code and additional information.
-
-        Notes:
-            Error codes:
-                0: Success
-                252: User not found in the database
-                253: Invalid input
-        """
-        # Validate input
-        if sender_uuid == "" or receiver_uuid == "" or amount == "":
-            return 253, ""
-
-        # Verify that receiver account exists
-        if self.__database.read(uuid=receiver_uuid) is None:
-            return 252, ""
-
-        # Verify that sender account exists and its password is correct
-        user = self.__database.read(uuid=sender_uuid)
-        if user is None:
-            return 253, ""
-        username = user.get_data()[1]
-
-        login_error_code, _ = self.login(username, password)
-
-        if login_error_code != 0:
-            return login_error_code, ""
-
-        # Check funds
-        withdraw_error_code, _ = self.withdraw(uuid=sender_uuid, amount=amount)
-
-        if withdraw_error_code == 0:
-            return self.deposit(uuid=receiver_uuid, amount=amount)
-
-        return withdraw_error_code, ""
+#     def pay(
+#         self,
+#         sender_uuid: str = "",
+#         receiver_uuid: str = "",
+#         amount: str = "",
+#         password: str = "",
+#     ) -> tuple[int, str]:
+#         """
+#         Commits a payment, a transfer with included password
+#
+#         Args:
+#             sender_uuid (str): The UUID of the sender.
+#             receiver_uuid (str): The UUID of the receiver.
+#             amount (str): The amount to transfer.
+#             password (str): The password of the sender account.
+#
+#         Returns:
+#             tuple[int, str]: A tuple containing the error code and additional information.
+#
+#         Notes:
+#             Error codes:
+#                 0: Success
+#                 252: User not found in the database
+#                 253: Invalid input
+#         """
+#         # Validate input
+#         if sender_uuid == "" or receiver_uuid == "" or amount == "":
+#             return 253, ""
+#
+#         # Verify that receiver account exists
+#         if self.__database.read(uuid=receiver_uuid) is None:
+#             return 252, ""
+#
+#         # Verify that sender account exists and its password is correct
+#         user = self.__database.read(uuid=sender_uuid)
+#         if user is None:
+#             return 253, ""
+#         username = user.get_data()[1]
+#
+#         login_error_code, _ = self.login(username, password)
+#
+#         if login_error_code != 0:
+#             return login_error_code, ""
+#
+#         # Check funds
+#         withdraw_error_code, _ = self.withdraw(uuid=sender_uuid, amount=amount)
+#
+#         if withdraw_error_code == 0:
+#             return self.deposit(uuid=receiver_uuid, amount=amount)
+#
+#         return withdraw_error_code, ""
