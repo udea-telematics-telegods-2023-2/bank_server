@@ -1,12 +1,13 @@
-from os import makedirs
+# Standard library modules
 import sqlite3
-from argon2 import PasswordHasher
 from dataclasses import dataclass
+from pathlib import Path
 
-# Import utils
-from src.utils import get_project_root
+# Third party modules
+from argon2 import PasswordHasher
 
-PROJECT_ROOT = get_project_root()
+# Local modules
+from src.utils import setup_logger
 
 
 @dataclass
@@ -18,27 +19,23 @@ class User:
     Attributes:
         uuid (str): A unique identifier (UUID) for the user.
         username (str): The username associated with the user.
-        hash (str): The hashed password of the user.
+        password (str): The hashed password of the user.
         balance (float): The balance associated with the user.
-
-    Methods:
-        get_data() -> tuple[str, str, str, float]:
-            Retrieves the user data as a tuple containing UUID, username, hashed password, and balance.
     """
 
     uuid: str
     username: str
-    hashed_password: str
+    password: str
     balance: float = 0.0
 
     def get_data(self) -> tuple[str, str, str, float]:
         """
-        Retrieves the User data as a tuple containing UUID, username, hashed password, and balance.
+        Retrieves all the User data as a tuple containing each attribute.
 
         Returns:
             tuple[str, str, str, float]: A tuple containing User data.
         """
-        return self.uuid, self.username, self.hashed_password, self.balance
+        return self.uuid, self.username, self.password, self.balance
 
 
 class UserDatabase:
@@ -46,7 +43,7 @@ class UserDatabase:
     A class representing a user database with methods to interact with user data.
 
     Attributes:
-        db_path (str): The path to the SQLite database file.
+        dbpath (str): The path to the SQLite database file.
 
     Methods:
         create(user: User): Inserts a new user into the database.
@@ -55,18 +52,26 @@ class UserDatabase:
         delete(uuid: str): Removes an existing user from the database.
     """
 
-    def __init__(self, db_path: str = f"{PROJECT_ROOT}/db/bank.db"):
+    def __init__(self, dbpath: Path, verbose: bool = False):
         """
         Initializes the database with a standard bank table containing the
         User data.
 
         Args:
-            db_path (str): The path to the DB, defaults to {PROJECT_ROOT}/db/bank.db
+            dbpath (str): The path to the DB.
         """
-        self.__db_path: str = db_path
+        self.__logger = setup_logger(name="db", verbose=verbose)
+        self.__logger.debug(f"Instantiating new UserDatabase with dbpath = {dbpath}")
+
+        self.__dbpath = dbpath
+
         # Create directories if they don't exist
-        makedirs(db_path[: db_path.rindex("/")], exist_ok=True)
-        with sqlite3.connect(self.__db_path) as connection:
+        if not self.__dbpath.is_file():
+            self.__logger.debug("Creating database file")
+            self.__dbpath.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create table if it doesn't exists
+        with sqlite3.connect(self.__dbpath) as connection:
             connection.execute(
                 """
                     CREATE TABLE IF NOT EXISTS bank (
@@ -77,6 +82,7 @@ class UserDatabase:
                     );
                 """
             )
+        self.__logger.info("Database succesfully loaded.")
 
     def create(self, user: User):
         """
@@ -85,7 +91,9 @@ class UserDatabase:
         Args:
             user (User): The User instance to be inserted into the database.
         """
-        with sqlite3.connect(self.__db_path) as connection:
+        self.__logger.debug(f"Creating user with data = {user.get_data()}")
+
+        with sqlite3.connect(self.__dbpath) as connection:
             connection.execute(
                 """
                     INSERT INTO bank (uuid, username, hash, balance)
@@ -95,7 +103,7 @@ class UserDatabase:
                 user.get_data(),
             )
 
-    def read(self, uuid: str | None = None, username: str | None = None) -> User | None:
+    def read(self, uuid: str = "", username: str = "") -> User | None:
         """
         Retrieves a user from the 'bank' table by UUID.
 
@@ -105,17 +113,20 @@ class UserDatabase:
         Returns:
             User | None: A User instance if found, or None if the user is not found.
         """
-        if uuid is None and username is None:
-            return None
+        search_keyword = "uuid" if uuid != "" else "username"
+        search_value = uuid if search_keyword == "uuid" else username
+        self.__logger.debug(f"Reading user with {search_keyword} = {search_value}")
 
-        with sqlite3.connect(self.__db_path) as connection:
+        with sqlite3.connect(self.__dbpath) as connection:
             cursor = connection.cursor()
-            query = f"SELECT * FROM bank WHERE {'uuid' if uuid is not None else 'username'} = ?"
+            query = f"SELECT * FROM bank WHERE {search_keyword} = ?"
             result = cursor.execute(
                 query,
-                (uuid if uuid is not None else username,),
+                (search_value,),
             )
             user = result.fetchone()
+            self.__logger.debug(f"Got {user if user is not None else 'nothing'}")
+
             return User(*user) if user is not None else user
 
     def update(self, uuid: str, password: str = "", delta_balance: float = 0.0):
@@ -143,7 +154,11 @@ class UserDatabase:
                 uuid (str): The UUID of the user.
                 password (str): The new password for the user.
             """
-            with sqlite3.connect(self.__db_path) as connection:
+            self.__logger.debug(
+                f"Updating password for uuid = {uuid}, using password = {password}"
+            )
+
+            with sqlite3.connect(self.__dbpath) as connection:
                 connection.execute(
                     """
                         UPDATE bank
@@ -161,11 +176,15 @@ class UserDatabase:
                 uuid (str): The UUID of the user.
                 delta_balance (float): The change in balance for the user.
             """
-            with sqlite3.connect(self.__db_path) as connection:
-                user = self.read(uuid)
+            self.__logger.debug(
+                f"Updating balance for uuid = {uuid}, using delta_balance = {delta_balance}"
+            )
+
+            with sqlite3.connect(self.__dbpath) as connection:
+                user = self.read(uuid=uuid)
                 if user is None:
                     raise NameError(f"User with UUID {uuid} not found.")
-                current_balance = user.get_data()[3]
+                current_balance = user.balance
                 new_balance = current_balance + delta_balance
                 connection.execute(
                     """
@@ -189,7 +208,9 @@ class UserDatabase:
         Args:
             uuid (str): The UUID of the user to be deleted.
         """
-        with sqlite3.connect(self.__db_path) as connection:
+        self.__logger.debug(f"Deleting user with uuid = {uuid}")
+
+        with sqlite3.connect(self.__dbpath) as connection:
             connection.execute(
                 """
                     DELETE FROM bank 

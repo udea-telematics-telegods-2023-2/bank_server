@@ -1,7 +1,7 @@
 # TeleGods Bank Server
 
-TeleGods Bank Server is part of the final project of the "Servicios Telemáticos" course
-at Universidad de Antioquia. The assignment involves building three
+TeleGods Bank Server is part of the final project of the "Servicios Telemáticos"
+course at Universidad de Antioquia. The assignment involves building three
 applications: a bank server, a liquor store server, and a client for these two.
 Each application is containerized and designed for easy deployment.
 
@@ -21,10 +21,11 @@ Each application is containerized and designed for easy deployment.
 ### Server Error Codes
 
 - **0:** No error
-- **1:** Invalid login (User not found or incorrect password)
-- **2:** Invalid registration (User already registered)
-- **3:** Insufficient funds (Tried to withdraw or transfer more than it has)
-- **4:** Insufficient stock (Not enough liquor)
+- **1:** Invalid registration (User already registered)
+- **2:** Invalid login (User not found or incorrect password)
+- **3:** Session conflict
+- **4:** Insufficient funds (Tried to withdraw or transfer more than it has)
+- **5:** Insufficient stock (Not enough liquor)
 
 ### Client Error Codes
 
