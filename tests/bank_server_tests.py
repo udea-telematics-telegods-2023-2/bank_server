@@ -1,4 +1,7 @@
 # Standard library modules
+import asyncio
+import socket
+import ssl
 import unittest
 
 from os import remove
@@ -10,6 +13,7 @@ import argon2
 # Local modules
 from src.bank import Bank
 from src.db import User, UserDatabase
+from src.server import Server
 from src.utils import ErrorCode
 
 # Globals
@@ -413,6 +417,40 @@ class TestBankTransactions(unittest.TestCase):
         # Clean up the database after tests
         for uuid in self.uuids:
             self.database.delete(uuid)
+
+    # class TestServer(unittest.TestCase):
+    #     """
+    #     Tests the bank server.
+    #     """
+    #
+    #     def setUp(self):
+    #         self.server_address = ("localhost", 55555)
+    #         self.server = Server(
+    #             server_address=self.server_address,
+    #             dbpath=Path("tests/test.db"),
+    #             certfile=Path("tests/test.crt"),
+    #             keyfile=Path("tests/test.key"),
+    #             verbose=True,
+    #         )
+    #
+    #         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    #         self.context.load_verify_locations("tests/test.crt")
+    #         self.server.tcp_thread.start()
+    #
+    #     async def test_client_ssl_connection(self):
+    #         expected_response = "OK bank"
+    #         message = "HI"
+    #         with socket.create_connection(self.server_address) as sock:
+    #             with self.context.wrap_socket(
+    #                 sock, server_hostname=self.server_address[0]
+    #             ) as ssock:
+    #                 ssock.send(message.encode("utf-8"))
+    #                 res = ssock.recv(2048).decode()
+    #                 self.assertEqual(res, expected_response)
+    #
+    #     def tearDown(self):
+    #         self.server.tcp_server.shutdown()
+    #         self.server.tcp_thread.join()
 
 
 if __name__ == "__main__":

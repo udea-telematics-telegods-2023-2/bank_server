@@ -6,10 +6,9 @@ import socket
 
 from pathlib import Path
 from socketserver import (
+    BaseRequestHandler,
     ForkingTCPServer,
     ForkingUDPServer,
-    StreamRequestHandler,
-    DatagramRequestHandler,
 )
 from threading import Thread
 
@@ -78,7 +77,7 @@ class Command:
             #                self.__check_args(args_number=4, fn=bank.pay)
 
             case _:
-                self.__arguments = []
+                self.arguments = []
 
     def no_fn(self, _=None) -> tuple[ErrorCode, str]:
         """
@@ -96,8 +95,8 @@ class Command:
         """
         Checks if the number of arguments supplied is correct.
         """
-        if len(self.__arguments) != args_number:
-            self.__arguments = []
+        if len(self.arguments) != args_number:
+            self.arguments = []
             self.__fn = self.bad_args
         else:
             self.__fn = fn
@@ -115,12 +114,12 @@ class Command:
         """
         if self.fn != self.no_fn:
             self.logger.debug(
-                f"{self.command}:{self.arguments} executed",
+                f"Executing {self.command}:{self.arguments}",
             )
-        self.__error_code, data = self.__fn(*self.__arguments)
-        if self.__error_code == ErrorCode.OK:
+        self.error_code, data = self.__fn(*self.arguments)
+        if self.error_code == ErrorCode.OK:
             return ErrorCode.OK, data
-        return self.__error_code, ""
+        return self.error_code, ""
 
 
 class BankTCPServer(ForkingTCPServer):
@@ -131,19 +130,26 @@ class BankTCPServer(ForkingTCPServer):
         bank: Bank,
         certfile: Path,
         keyfile: Path,
-        verbose: bool,
+        logger: Logger,
     ):
         self.bank = bank
         self.certfile = certfile
         self.keyfile = keyfile
-        self.verbose = verbose
+        self.logger = logger
         self.sessions = {}
 
-        super().__init__(
-            server_address,
-            lambda *args, **kwargs: handler(*args, **kwargs),
+        # Create SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.logger.debug(
+            f"Loading credentials with certfile = {self.certfile} and keyfile = {self.keyfile}"
         )
+        context.load_cert_chain(certfile=self.certfile, keyfile=self.keyfile)
+        self.logger.debug("SSL context created succesfully")
+
+        super().__init__(server_address, handler)
+        self.socket = context.wrap_socket(self.socket, server_side=True)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.logger.debug("Bank TCP Server instantiated")
 
 
 class BankUDPServer(ForkingUDPServer):
@@ -154,51 +160,56 @@ class BankUDPServer(ForkingUDPServer):
         bank: Bank,
         certfile: Path,
         keyfile: Path,
-        verbose: bool,
+        logger: Logger,
     ):
         self.bank = bank
         self.certfile = certfile
         self.keyfile = keyfile
-        self.verbose = verbose
+        self.logger = logger
+
+        # Create SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.logger.debug(
+            f"Loading credentials with certfile = {self.certfile} and keyfile = {self.keyfile}"
+        )
+        context.load_cert_chain(certfile=self.certfile, keyfile=self.keyfile)
+        self.logger.debug("SSL context created succesfully")
 
         super().__init__(
             server_address,
-            lambda *args, **kwargs: handler(
-                *args, **kwargs, certfile=self.certfile, keyfile=self.keyfile
-            ),
+            handler,
         )
+        self.socket = context.wrap_socket(self.socket, server_side=True)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.logger.debug("Bank TCP Server instantiated")
 
 
-class BankTCPServerHandler(StreamRequestHandler):
+class BankTCPServerHandler(BaseRequestHandler):
     def __init__(
         self,
         request,
         client_address,
         server: BankTCPServer,
-        logger: Logger,
     ):
-        self.logger = logger
+        self.logger = server.logger
         self.bank = server.bank
         self.sessions = server.sessions
 
-        # Create SSL context
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain(certfile=server.certfile, keyfile=server.keyfile)
-        request = context.wrap_socket(server.socket, server_side=True)
-
         super().__init__(request, client_address, server)
+        self.logger.debug("Bank TCP Server Handler instantiated")
 
     def check_user(self, connected_uuid: str, cmd_uuid: str) -> bool:
+        self.logger.debug(f"Checking UUIDs {connected_uuid} = {cmd_uuid}?")
         return connected_uuid == cmd_uuid
 
     def handle_error(self, error_code: ErrorCode = ErrorCode.UNKNOWN_ERROR):
         error_msg = f"Error {error_code.value}: {error_code}"
         self.logger.error(error_msg)
-        self.request.sendall(f"ERR {error_code.value}\r\n".encode("utf-8"))
+        self.request.sendall(f"ERR {error_code.value}".encode("utf-8"))
 
     def send_ok_data(self, ok_data=""):
-        self.request.sendall(f"OK {ok_data}\r\n".encode("utf-8"))
+        self.logger.debug(f"OK data: {ok_data}")
+        self.request.sendall(f"OK {ok_data}".encode("utf-8"))
 
     def handle_logout(self, client_address: str):
         # Removes sessions entry for current session and logs the event
@@ -225,12 +236,14 @@ class BankTCPServerHandler(StreamRequestHandler):
             self.send_ok_data(cmd_return)
             if command == "LOGIN":
                 # Updates sessions dictionary
+                self.logger.debug(f"Sessions set before {self.sessions}")
                 self.sessions[self.client_address] = cmd_return
 
                 # Logs login event and changes the flag
                 self.username = arguments[0]
                 self.uuid = cmd_return
                 self.logger.info(f"User {self.username} has logged in")
+                self.logger.debug(f"Sessions set after {self.sessions}")
                 logged_in = True
 
         return logged_in
@@ -241,6 +254,7 @@ class BankTCPServerHandler(StreamRequestHandler):
 
         # Sets connected UUID as argument if not given by client
         if arguments == []:
+            self.logger.debug(f"Arguments list empty, using session UUID as argument")
             arguments = [self.uuid]
 
         cmd = Command(
@@ -275,8 +289,10 @@ class BankTCPServerHandler(StreamRequestHandler):
 
         while True:
             if not logged:
+                self.logger.debug("Not logged in")
                 # Read data from buffer
                 data = self.request.recv(4096)
+                self.logger.debug(f"Data received: {data}")
 
                 # Check if client disconnected
                 if not data:
@@ -284,15 +300,19 @@ class BankTCPServerHandler(StreamRequestHandler):
                     break
 
                 # Checks non-empty message
-                if len(data) <= 2:
-                    self.logger.warning("Empty message")
+                if len(data) == 0:
+                    self.logger.warning(
+                        f"Empty message received from {self.client_address}"
+                    )
                     continue
 
                 # Handle pre-login
                 logged = self.handle_pre_login(data.decode("utf-8"))
             else:
+                self.logger.debug("Logged in")
                 # Read data from buffer
                 data = self.request.recv(4096)
+                self.logger.debug(f"Data received: {data}")
 
                 # Check if client disconnected
                 if not data:
@@ -301,8 +321,10 @@ class BankTCPServerHandler(StreamRequestHandler):
                     break
 
                 # Checks non-empty message
-                if len(data) <= 2:
-                    self.logger.warning("Empty message")
+                if len(data) == 0:
+                    self.logger.warning(
+                        f"Empty message received from {self.client_address}"
+                    )
                     continue
 
                 logged = self.handle_post_login(data.decode("utf-8"))
@@ -310,7 +332,7 @@ class BankTCPServerHandler(StreamRequestHandler):
         self.finish()
 
 
-class BankUDPServerHandler(DatagramRequestHandler):
+class BankUDPServerHandler(BaseRequestHandler):
     pass
 
 
@@ -452,7 +474,9 @@ class Server:
     ):
         self.logger = setup_logger(name="server", verbose=verbose)
         self.server_address = server_address
+        self.logger.debug("Server Address assigned")
         self.bank = Bank(dbpath, verbose)
+        self.logger.debug("Bank created")
 
         # Create servers and their threads
         self.udp_server = BankUDPServer(
@@ -461,20 +485,23 @@ class Server:
             bank=self.bank,
             certfile=certfile,
             keyfile=keyfile,
-            verbose=verbose,
+            logger=self.logger,
         )
+        self.logger.debug("UDP Server created")
 
         self.tcp_server = BankTCPServer(
             server_address=server_address,
-            handler=BankUDPServerHandler,
+            handler=BankTCPServerHandler,
             bank=self.bank,
             certfile=certfile,
             keyfile=keyfile,
-            verbose=verbose,
+            logger=self.logger,
         )
+        self.logger.debug("TCP Server created")
 
         self.udp_thread = Thread(target=self.udp_server.serve_forever)
         self.tcp_thread = Thread(target=self.tcp_server.serve_forever)
+        self.logger.debug("Threads created")
 
     def start(self):
         # Start the threads
