@@ -160,6 +160,7 @@ assets/
 
 # Ignore databases
 /db/
+*.db
 
 # Ignore certificates
 /certs/
