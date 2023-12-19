@@ -63,7 +63,7 @@ class Command:
             case "DEPOSIT":
                 self.__check_args(args_number=2, fn=bank.deposit)
 
-            case "WITH":
+            case "WITHDRAW":
                 self.__check_args(args_number=2, fn=bank.withdraw)
 
             case "TRANSFER":
@@ -147,6 +147,7 @@ class BankTCPServer(ForkingTCPServer):
 
         super().__init__(server_address, handler)
         self.socket = context.wrap_socket(self.socket, server_side=True)
+        self.allow_reuse_port = True
         self.logger.debug("Bank TCP Server instantiated")
 
 
@@ -178,6 +179,7 @@ class BankUDPServer(ForkingUDPServer):
             handler,
         )
         self.socket = context.wrap_socket(self.socket, server_side=True)
+        self.allow_reuse_port = True
         self.logger.debug("Bank TCP Server instantiated")
 
 
