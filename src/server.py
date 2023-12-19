@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 # Standard library modules
-from logging import Logger
 import ssl
-import socket
 
+from logging import Logger
 from pathlib import Path
 from socketserver import (
     BaseRequestHandler,
@@ -148,7 +147,6 @@ class BankTCPServer(ForkingTCPServer):
 
         super().__init__(server_address, handler)
         self.socket = context.wrap_socket(self.socket, server_side=True)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.logger.debug("Bank TCP Server instantiated")
 
 
@@ -180,7 +178,6 @@ class BankUDPServer(ForkingUDPServer):
             handler,
         )
         self.socket = context.wrap_socket(self.socket, server_side=True)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.logger.debug("Bank TCP Server instantiated")
 
 
@@ -479,15 +476,15 @@ class Server:
         self.logger.debug("Bank created")
 
         # Create servers and their threads
-        self.udp_server = BankUDPServer(
-            server_address=server_address,
-            handler=BankUDPServerHandler,
-            bank=self.bank,
-            certfile=certfile,
-            keyfile=keyfile,
-            logger=self.logger,
-        )
-        self.logger.debug("UDP Server created")
+        # self.udp_server = BankUDPServer(
+        #     server_address=server_address,
+        #     handler=BankUDPServerHandler,
+        #     bank=self.bank,
+        #     certfile=certfile,
+        #     keyfile=keyfile,
+        #     logger=self.logger,
+        # )
+        # self.logger.debug("UDP Server created")
 
         self.tcp_server = BankTCPServer(
             server_address=server_address,
@@ -499,21 +496,21 @@ class Server:
         )
         self.logger.debug("TCP Server created")
 
-        self.udp_thread = Thread(target=self.udp_server.serve_forever)
+        # self.udp_thread = Thread(target=self.udp_server.serve_forever)
         self.tcp_thread = Thread(target=self.tcp_server.serve_forever)
         self.logger.debug("Threads created")
 
     def start(self):
         # Start the threads
         ip, port = self.server_address
-        self.udp_thread.start()
-        self.logger.info(f"UDP Server listening on {ip}:{port}")
+        # self.udp_thread.start()
+        # self.logger.info(f"UDP Server listening on {ip}:{port}")
         self.tcp_thread.start()
         self.logger.info(f"TCP Server listening on {ip}:{port}")
 
         # Wait for both threads to finish
+        # self.udp_thread.join()
         self.tcp_thread.join()
-        self.udp_thread.join()
 
     def stop(self):
         # Empty print to not have the ^C in the same line as the warn
@@ -521,8 +518,8 @@ class Server:
         self.logger.warning("Stopping server, please wait...")
 
         # Shutdown both servers
+        # SERVER.udp_server.shutdown()
         SERVER.tcp_server.shutdown()
-        SERVER.udp_server.shutdown()
 
 
 if __name__ == "__main__":

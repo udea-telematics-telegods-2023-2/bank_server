@@ -9,5 +9,5 @@ context.load_verify_locations("./test.crt")
 with socket.create_connection((hostname, port)) as sock:
     with context.wrap_socket(sock, server_hostname=hostname) as ssock:
         while True:
-            ssock.send(input("Escribe: ").encode("utf-8"))
+            ssock.send(input().encode("utf-8"))
             print(ssock.recv(1024).decode())

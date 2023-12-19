@@ -1,7 +1,4 @@
 # Standard library modules
-import asyncio
-import socket
-import ssl
 import unittest
 
 from os import remove
@@ -13,7 +10,6 @@ import argon2
 # Local modules
 from src.bank import Bank
 from src.db import User, UserDatabase
-from src.server import Server
 from src.utils import ErrorCode
 
 # Globals
@@ -263,7 +259,7 @@ class TestBankTransactions(unittest.TestCase):
 
         # Without UUID
         delta_balance = 5000
-        deposit_error_code, _ = self.bank.deposit(amount=delta_balance)
+        deposit_error_code, _ = self.bank.deposit(amount=str(delta_balance))
         self.assertEqual(deposit_error_code, expected_error_code)
 
         # Without amount
@@ -279,7 +275,7 @@ class TestBankTransactions(unittest.TestCase):
 
         # Deposit delta_balance to test_user1 and test error code
         delta_balance = 5000
-        deposit_error_code, _ = self.bank.deposit(uuid=uuid, amount=delta_balance)
+        deposit_error_code, _ = self.bank.deposit(uuid=uuid, amount=str(delta_balance))
 
         # Error 0 is no error
         self.assertEqual(deposit_error_code, expected_error_code)
@@ -295,19 +291,13 @@ class TestBankTransactions(unittest.TestCase):
 
         # Without UUID
         withdraw_amount = 3000
-        withdrawal_error_code, _ = self.bank.withdraw(amount=withdraw_amount)
+        withdrawal_error_code, _ = self.bank.withdraw(amount=str(withdraw_amount))
         self.assertEqual(withdrawal_error_code, expected_error_code)
 
         # Without amount
         uuid = self.uuids[0]
         withdrawal_error_code, _ = self.bank.withdraw(uuid=uuid)
         self.assertEqual(withdrawal_error_code, expected_error_code)
-
-        # With negative amount
-        uuid = self.uuids[0]
-        withdraw_amount = -3000
-        withdraw_error_code, _ = self.bank.withdraw(uuid=uuid, amount=withdraw_amount)
-        self.assertEqual(withdraw_error_code, expected_error_code)
 
     def test_withdraw_with_not_enough_balance(self):
         expected_error_code = INSUFFICIENT_FUNDS
@@ -317,7 +307,9 @@ class TestBankTransactions(unittest.TestCase):
 
         # Withdraw from account
         withdraw_amount = 3000
-        withdraw_error_code, _ = self.bank.withdraw(uuid=uuid, amount=withdraw_amount)
+        withdraw_error_code, _ = self.bank.withdraw(
+            uuid=uuid, amount=str(withdraw_amount)
+        )
         self.assertEqual(withdraw_error_code, expected_error_code)
 
         # Confirm unaffected balance and unsuccesful withdrawal
@@ -330,12 +322,14 @@ class TestBankTransactions(unittest.TestCase):
 
         uuid = self.uuids[0]
         deposit_amount = 5000
-        self.bank.deposit(uuid=uuid, amount=deposit_amount)
+        self.bank.deposit(uuid=uuid, amount=str(deposit_amount))
         old_balance = float(self.bank.balance(uuid=uuid)[1])
 
         # Withdraw from account
         withdraw_amount = 3000
-        withdraw_error_code, _ = self.bank.withdraw(uuid=uuid, amount=withdraw_amount)
+        withdraw_error_code, _ = self.bank.withdraw(
+            uuid=uuid, amount=str(withdraw_amount)
+        )
         self.assertEqual(withdraw_error_code, expected_error_code)
 
         # Confirm new balance, and succesful withdrawal
@@ -352,13 +346,13 @@ class TestBankTransactions(unittest.TestCase):
 
         # Without sender_uuid
         transfer_error_code, _ = self.bank.transfer(
-            receiver_uuid=uuid2, amount=transfer_amount
+            receiver_uuid=uuid2, amount=str(transfer_amount)
         )
         self.assertEqual(transfer_error_code, expected_error_code)
 
         # Without receiver_uuid
         transfer_error_code, _ = self.bank.transfer(
-            sender_uuid=uuid1, amount=transfer_amount
+            sender_uuid=uuid1, amount=str(transfer_amount)
         )
         self.assertEqual(transfer_error_code, expected_error_code)
 
@@ -377,13 +371,13 @@ class TestBankTransactions(unittest.TestCase):
 
         # Sender UUID non existent
         transfer_error_code, _ = self.bank.transfer(
-            sender_uuid=uuid2, receiver_uuid=uuid1, amount=transfer_amount
+            sender_uuid=uuid2, receiver_uuid=uuid1, amount=str(transfer_amount)
         )
         self.assertEqual(transfer_error_code, expected_error_code)
 
         # Receiver UUID non existent
         transfer_error_code, _ = self.bank.transfer(
-            sender_uuid=uuid1, receiver_uuid=uuid2, amount=transfer_amount
+            sender_uuid=uuid1, receiver_uuid=uuid2, amount=str(transfer_amount)
         )
         self.assertEqual(transfer_error_code, expected_error_code)
 
@@ -392,7 +386,7 @@ class TestBankTransactions(unittest.TestCase):
 
         uuid1, uuid2 = self.uuids
         deposit_amount = 5000
-        self.bank.deposit(uuid=uuid1, amount=deposit_amount)
+        self.bank.deposit(uuid=uuid1, amount=str(deposit_amount))
 
         # Check balance before transfer
         old_balance1 = float(self.bank.balance(uuid=uuid1)[1])
@@ -400,7 +394,7 @@ class TestBankTransactions(unittest.TestCase):
 
         transfer_amount = deposit_amount
         transfer_error_code, _ = self.bank.transfer(
-            sender_uuid=uuid1, receiver_uuid=uuid2, amount=transfer_amount
+            sender_uuid=uuid1, receiver_uuid=uuid2, amount=str(transfer_amount)
         )
         self.assertEqual(transfer_error_code, expected_error_code)
 

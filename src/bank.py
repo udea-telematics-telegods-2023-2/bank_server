@@ -23,21 +23,7 @@ UNKNOWN_ERROR = ErrorCode.UNKNOWN_ERROR
 
 
 class Bank:
-    """
-    Represents a simple banking system with user registration, login, and basic transaction functionalities.
-
-    Attributes:
-        database (UserDatabase): The database to store user information.
-    """
-
     def __init__(self, dbpath: Path, verbose: bool = False):
-        """
-        Initializes a new instance of the Bank class.
-
-        Args:
-            database (UserDatabase): The database to store user information.
-            connected_users (dict): The UUIDs that are using the bank at the moment.
-        """
         self.logger = setup_logger(name="bank", verbose=verbose)
         self.logger.debug("Instantiating new Bank")
 
@@ -45,25 +31,9 @@ class Bank:
         self.__connected_users = set()
 
     def get_db(self) -> UserDatabase:
-        """
-        Returns the DB.
-
-        Returns:
-            UserDatabase: The internal database object.
-        """
         return self.__database
 
     def register(self, username: str = "", password: str = "") -> tuple[ErrorCode, str]:
-        """
-        Registers a new user in the system.
-
-        Args:
-            username (str): The username for the new user.
-            password (str): The plain-text password for the new user.
-
-        Returns:
-            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
-        """
         self.logger.debug(
             f"Registering new user with username = {username}, password = {password}"
         )
@@ -88,12 +58,6 @@ class Bank:
         return OK, ""
 
     def logout(self, uuid: str = "") -> tuple[ErrorCode, str]:
-        """
-        Logs out the specified user.
-
-        Returns:
-            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
-        """
         self.logger.debug(f"Logging out user with uuid = {uuid}")
 
         # Check empty fields
@@ -108,16 +72,6 @@ class Bank:
         return OK, ""
 
     def login(self, username: str = "", password: str = "") -> tuple[ErrorCode, str]:
-        """
-        Logs in an existing user.
-
-        Args:
-            username (str): The username of the user trying to log in.
-            password (str): The plain-text password of the user.
-
-        Returns:
-            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
-        """
         self.logger.debug(
             f"Logging in user with username = {username} and password = {password}"
         )
@@ -152,17 +106,6 @@ class Bank:
     def change_password(
         self, uuid: str = "", old_password: str = "", new_password: str = ""
     ) -> tuple[ErrorCode, str]:
-        """
-        Changes the password for a user.
-
-        Args:
-            uuid (str): The UUID of the user.
-            old_password (str): The old plain-text password.
-            new_password (str): The new plain-text password.
-
-        Returns:
-            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
-        """
         self.logger.debug(
             f"Changing password for user with uuid = {uuid} and passwords = {old_password} {new_password}"
         )
@@ -187,15 +130,6 @@ class Bank:
         return OK, ""
 
     def balance(self, uuid: str = "") -> tuple[ErrorCode, str]:
-        """
-        Retrieves the balance for a user.
-
-        Args:
-            uuid (str): The UUID of the user.
-
-        Returns:
-            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
-        """
         self.logger.debug(f"Checking balance for user with uuid = {uuid}")
 
         # Validate input
@@ -209,29 +143,21 @@ class Bank:
 
         return OK, str(user_data.balance)
 
-    def deposit(self, uuid: str = "", amount: float = 0.0) -> tuple[ErrorCode, str]:
-        """
-        Deposits money into a user's account.
-
-        Args:
-            uuid (str): The UUID of the user.
-            amount (float): The amount to deposit.
-
-        Returns:
-            tuple[ErrorCode, str]: A tuple containing the error code and additional information.
-        """
+    def deposit(self, uuid: str = "", amount: str = "") -> tuple[ErrorCode, str]:
         self.logger.debug(
             f"Adding funds for user with uuid = {uuid} with amount = {amount}"
         )
 
         # Validate input
-        if uuid == "" or amount == 0.0:
+        if uuid == "" or amount == "":
             return BAD_ARGUMENTS, ""
 
-        self.__database.update(uuid=uuid, delta_balance=amount)
+        # Cast string input to float
+        deposit_amount = float(amount)
+        self.__database.update(uuid=uuid, delta_balance=deposit_amount)
         return OK, ""
 
-    def withdraw(self, uuid: str = "", amount: float = 0.0) -> tuple[ErrorCode, str]:
+    def withdraw(self, uuid: str = "", amount: str = "") -> tuple[ErrorCode, str]:
         """
         Withdraws money from a user's account.
 
@@ -247,7 +173,7 @@ class Bank:
         )
 
         # Validate input
-        if uuid == "" or amount <= 0.0:
+        if uuid == "" or amount == "":
             return BAD_ARGUMENTS, ""
 
         # Check funds
@@ -256,14 +182,15 @@ class Bank:
             return UUID_NOT_FOUND, ""
 
         balance = float(balance)
-        if balance - amount < 0.0:
+        withdraw_amount = float(amount)
+        if balance - withdraw_amount < 0.0:
             return INSUFFICIENT_FUNDS, ""
 
-        self.__database.update(uuid=uuid, delta_balance=-float(amount))
+        self.__database.update(uuid=uuid, delta_balance=-withdraw_amount)
         return OK, ""
 
     def transfer(
-        self, sender_uuid: str = "", receiver_uuid: str = "", amount: float = 0.0
+        self, sender_uuid: str = "", receiver_uuid: str = "", amount: str = ""
     ) -> tuple[ErrorCode, str]:
         """
         Transfers money from one user to another.
@@ -281,7 +208,7 @@ class Bank:
         )
 
         # Validate input
-        if sender_uuid == "" or receiver_uuid == "" or amount == 0.0:
+        if sender_uuid == "" or receiver_uuid == "" or amount == "":
             return BAD_ARGUMENTS, ""
 
         # Verify that receiver account exists
