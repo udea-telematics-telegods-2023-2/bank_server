@@ -38,8 +38,8 @@ class Bank:
             database (UserDatabase): The database to store user information.
             connected_users (dict): The UUIDs that are using the bank at the moment.
         """
-        self.__logger = setup_logger(name="bank", verbose=verbose)
-        self.__logger.debug("Instantiating new Bank")
+        self.logger = setup_logger(name="bank", verbose=verbose)
+        self.logger.debug("Instantiating new Bank")
 
         self.__database = UserDatabase(dbpath=dbpath, verbose=verbose)
         self.__connected_users = set()
@@ -64,7 +64,7 @@ class Bank:
         Returns:
             tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        self.__logger.debug(
+        self.logger.debug(
             f"Registering new user with username = {username}, password = {password}"
         )
 
@@ -94,7 +94,7 @@ class Bank:
         Returns:
             tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        self.__logger.debug(f"Logging out user with uuid = {uuid}")
+        self.logger.debug(f"Logging out user with uuid = {uuid}")
 
         # Check empty fields
         if uuid == "":
@@ -118,7 +118,7 @@ class Bank:
         Returns:
             tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        self.__logger.debug(
+        self.logger.debug(
             f"Logging in user with username = {username} and password = {password}"
         )
 
@@ -163,7 +163,7 @@ class Bank:
         Returns:
             tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        self.__logger.debug(
+        self.logger.debug(
             f"Changing password for user with uuid = {uuid} and passwords = {old_password} {new_password}"
         )
 
@@ -196,7 +196,7 @@ class Bank:
         Returns:
             tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        self.__logger.debug(f"Checking balance for user with uuid = {uuid}")
+        self.logger.debug(f"Checking balance for user with uuid = {uuid}")
 
         # Validate input
         if uuid == "":
@@ -220,7 +220,7 @@ class Bank:
         Returns:
             tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        self.__logger.debug(
+        self.logger.debug(
             f"Adding funds for user with uuid = {uuid} with amount = {amount}"
         )
 
@@ -242,7 +242,7 @@ class Bank:
         Returns:
             tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        self.__logger.debug(
+        self.logger.debug(
             f"Withdrawing funds from user with uuid = {uuid} with amount = {amount}"
         )
 
@@ -276,7 +276,7 @@ class Bank:
         Returns:
             tuple[ErrorCode, str]: A tuple containing the error code and additional information.
         """
-        self.__logger.debug(
+        self.logger.debug(
             f"Transfering funds from user with uuid = {sender_uuid} to user with uuid = {receiver_uuid} with amount = {amount}"
         )
 
